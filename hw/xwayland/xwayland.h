@@ -112,6 +112,9 @@ struct xwl_window {
     struct xorg_list link_damage;
     struct wl_callback *frame_callback;
     Bool allow_commits;
+
+    RRCrtcPtr present_crtc_fake;
+    uint64_t present_msc;
 };
 
 #define MODIFIER_META 0x01

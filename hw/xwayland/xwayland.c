@@ -431,7 +431,7 @@ send_surface_id_event(struct xwl_window *xwl_window)
 static Bool
 xwl_realize_window(WindowPtr window)
 {
-    ErrorF("XX xwl_realize_window\n");
+    ErrorF("XX xwl_realize_window 1\n");
     ScreenPtr screen = window->drawable.pScreen;
     struct xwl_screen *xwl_screen;
     struct xwl_window *xwl_window;
@@ -452,6 +452,8 @@ xwl_realize_window(WindowPtr window)
         RegionNull(&window->clipList);
         RegionNull(&window->borderClip);
     }
+
+    ErrorF("XX xwl_realize_window, %i, %i\n", xwl_screen->rootless, window->redirectDraw);
 
     if (xwl_screen->rootless) {
         if (window->redirectDraw != RedirectDrawManual)
@@ -498,6 +500,13 @@ xwl_realize_window(WindowPtr window)
         wl_surface_set_opaque_region(xwl_window->surface, region);
         wl_region_destroy(region);
     }
+
+    xwl_window->present_crtc_fake = RRCrtcCreate(xwl_screen->screen, xwl_window);
+    if (!xwl_window->present_crtc_fake) {
+        ErrorF("Failed creating Present CRTC Fake for window.\n");
+        // TODOX: error handling
+    }
+    xwl_window->present_msc = 0;
 
     wl_display_flush(xwl_screen->display);
 
@@ -574,6 +583,7 @@ xwl_unrealize_window(WindowPtr window)
     DamageDestroy(xwl_window->damage);
     if (xwl_window->frame_callback)
         wl_callback_destroy(xwl_window->frame_callback);
+    RRCrtcDestroy(xwl_window->present_crtc_fake);
 
     free(xwl_window);
     dixSetPrivate(&window->devPrivates, &xwl_window_private_key, NULL);
@@ -839,19 +849,19 @@ wm_selection_callback(CallbackListPtr *p, void *data, void *arg)
     DeleteCallback(&SelectionCallback, wm_selection_callback, xwl_screen);
 }
 
-static RRCrtcPtr xwl_present_crtc = NULL;
-
 static RRCrtcPtr
 xwl_present_get_crtc(WindowPtr window)
 {
-    return xwl_present_crtc;
+    struct xwl_window *xwl_window = xwl_window_get(window);
+    return xwl_window->present_crtc_fake;
 }
 
 static int
 xwl_present_get_ust_msc(RRCrtcPtr crtc, CARD64 *ust, CARD64 *msc)
 {
-    // TODOX
-    return 0;
+    struct xwl_window *xwl_window = crtc->devPrivate;
+    *msc = xwl_window->present_msc;
+    return Success;
 }
 
 /*
@@ -896,7 +906,6 @@ xwl_present_check_flip(RRCrtcPtr crtc,
                       PixmapPtr pixmap,
                       Bool sync_flip)
 {
-    // TODOX
     ErrorF("XX xwl_present_check_flip\n");
     return TRUE;
 }
@@ -908,9 +917,15 @@ xwl_present_flip(RRCrtcPtr crtc,
                 PixmapPtr pixmap,
                 Bool sync_flip)
 {
+//#ifndef GLAMOR_HAS_GBM
+//    return FALSE;
+//#else
+
     // TODOX
     ErrorF("XX xwl_present_flip\n");
     return TRUE;
+
+//#endif
 }
 
 /*
@@ -1088,11 +1103,8 @@ xwl_screen_init(ScreenPtr pScreen, int argc, char **argv)
 
     if (xwl_screen->glamor) {
         //TODOX: combine condition with below and msg if error
-        ErrorF("XX macht present_init 1\n");
+        ErrorF("XX xwl_screen_init -> present_init 1\n");
         Bool ret = xwl_present_init(pScreen);
-        if (ret && !xwl_present_crtc)
-            xwl_present_crtc = RRCrtcCreate(xwl_screen->screen, NULL);
-        ErrorF("XX macht present_init 2 %i\n", xwl_present_crtc);
     }
 
     if (!xwl_screen->glamor) {
