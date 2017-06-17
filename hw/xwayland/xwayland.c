@@ -37,6 +37,8 @@
 #include <xserver_poll.h>
 #include <propertyst.h>
 
+#include <present.h>
+
 #ifdef XF86VIDMODE
 #include <X11/extensions/xf86vmproto.h>
 _X_EXPORT Bool noXFree86VidModeExtension;
@@ -429,6 +431,7 @@ send_surface_id_event(struct xwl_window *xwl_window)
 static Bool
 xwl_realize_window(WindowPtr window)
 {
+    ErrorF("XX xwl_realize_window\n");
     ScreenPtr screen = window->drawable.pScreen;
     struct xwl_screen *xwl_screen;
     struct xwl_window *xwl_window;
@@ -836,6 +839,113 @@ wm_selection_callback(CallbackListPtr *p, void *data, void *arg)
     DeleteCallback(&SelectionCallback, wm_selection_callback, xwl_screen);
 }
 
+static RRCrtcPtr xwl_present_crtc = NULL;
+
+static RRCrtcPtr
+xwl_present_get_crtc(WindowPtr window)
+{
+    return xwl_present_crtc;
+}
+
+static int
+xwl_present_get_ust_msc(RRCrtcPtr crtc, CARD64 *ust, CARD64 *msc)
+{
+    // TODOX
+    return 0;
+}
+
+/*
+ * Queue an event to report back to the Present extension when the specified
+ * MSC has past
+ */
+static int
+xwl_present_queue_vblank(RRCrtcPtr crtc,
+                        uint64_t event_id,
+                        uint64_t msc)
+{
+    // TODOX
+    return Success;
+}
+
+/*
+ * Remove a pending vblank event from the DRM queue so that it is not reported
+ * to the extension
+ */
+static void
+xwl_present_abort_vblank(RRCrtcPtr crtc, uint64_t event_id, uint64_t msc)
+{
+    // TODOX
+}
+
+/*
+ * Flush our batch buffer when requested by the Present extension.
+ */
+static void
+xwl_present_flush(WindowPtr window)
+{
+    // TODOX
+    ErrorF("YY xwl_present_flush\n");
+
+}
+
+
+
+static Bool
+xwl_present_check_flip(RRCrtcPtr crtc,
+                      WindowPtr window,
+                      PixmapPtr pixmap,
+                      Bool sync_flip)
+{
+    // TODOX
+    ErrorF("XX xwl_present_check_flip\n");
+    return TRUE;
+}
+
+static Bool
+xwl_present_flip(RRCrtcPtr crtc,
+                uint64_t event_id,
+                uint64_t target_msc,
+                PixmapPtr pixmap,
+                Bool sync_flip)
+{
+    // TODOX
+    ErrorF("XX xwl_present_flip\n");
+    return TRUE;
+}
+
+/*
+ * Queue a flip back to the normal frame buffer - not relevant for Xwayland
+ */
+static void
+xwl_present_unflip(ScreenPtr screen, uint64_t event_id)
+{
+}
+
+static present_screen_info_rec xwl_present_screen_info = {
+    .version = PRESENT_SCREEN_INFO_VERSION,
+
+    .get_crtc = xwl_present_get_crtc,
+
+    .get_ust_msc = xwl_present_get_ust_msc,
+    .queue_vblank = xwl_present_queue_vblank,
+    .abort_vblank = xwl_present_abort_vblank,
+    .flush = xwl_present_flush,
+
+    .capabilities = PresentCapabilityNone,
+#ifdef GLAMOR_HAS_GBM
+    .check_flip = xwl_present_check_flip,
+    .flip = xwl_present_flip,
+    .unflip = xwl_present_unflip,
+#endif
+};
+
+Bool
+xwl_present_init(ScreenPtr screen)
+{
+    ErrorF("XX xwl_present_init\n");
+    return present_screen_init(screen, &xwl_present_screen_info);
+}
+
 static Bool
 xwl_screen_init(ScreenPtr pScreen, int argc, char **argv)
 {
@@ -975,6 +1085,15 @@ xwl_screen_init(ScreenPtr pScreen, int argc, char **argv)
         xwl_screen->glamor = 0;
     }
 #endif
+
+    if (xwl_screen->glamor) {
+        //TODOX: combine condition with below and msg if error
+        ErrorF("XX macht present_init 1\n");
+        Bool ret = xwl_present_init(pScreen);
+        if (ret && !xwl_present_crtc)
+            xwl_present_crtc = RRCrtcCreate(xwl_screen->screen, NULL);
+        ErrorF("XX macht present_init 2 %i\n", xwl_present_crtc);
+    }
 
     if (!xwl_screen->glamor) {
         xwl_screen->CreateScreenResources = pScreen->CreateScreenResources;
