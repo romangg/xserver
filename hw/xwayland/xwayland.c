@@ -604,6 +604,13 @@ frame_callback(void *data,
 {
     struct xwl_window *xwl_window = data;
 
+    /* TODOX:
+     * - inform present that there was a new "vblank"
+     * - if there is no new buffer made directly afterwards, we still need to listen to
+     *   frame_callback to increase present_msc ... but is this event created after every vblank or only once?
+     */
+    xwl_window->present_msc++;
+
     wl_callback_destroy (xwl_window->frame_callback);
     xwl_window->frame_callback = NULL;
 }
@@ -615,6 +622,9 @@ static const struct wl_callback_listener frame_listener = {
 static void
 xwl_window_post_damage(struct xwl_window *xwl_window)
 {
+    // TODOX: Do this only the window doesn't use Present,
+    //        otherwise create (and destroy) buffers via Present
+
     struct xwl_screen *xwl_screen = xwl_window->xwl_screen;
     RegionPtr region;
     BoxPtr box;
@@ -893,7 +903,7 @@ xwl_present_abort_vblank(RRCrtcPtr crtc, uint64_t event_id, uint64_t msc)
 static void
 xwl_present_flush(WindowPtr window)
 {
-    // TODOX
+    // TODOX: what does this mean in the context of wayland buffers?
     ErrorF("YY xwl_present_flush\n");
 
 }
@@ -907,7 +917,11 @@ xwl_present_check_flip(RRCrtcPtr crtc,
                       Bool sync_flip)
 {
     ErrorF("XX xwl_present_check_flip\n");
+#ifndef GLAMOR_HAS_GBM
+    return FALSE;
+#else
     return TRUE;
+#endif
 }
 
 static Bool
@@ -917,15 +931,15 @@ xwl_present_flip(RRCrtcPtr crtc,
                 PixmapPtr pixmap,
                 Bool sync_flip)
 {
-//#ifndef GLAMOR_HAS_GBM
-//    return FALSE;
-//#else
+    /* TODOX
+     * - create wl_buffer
+     * - commit it
+     * - connect to buffer release signal (?)
+     *
+     */
 
-    // TODOX
     ErrorF("XX xwl_present_flip\n");
     return TRUE;
-
-//#endif
 }
 
 /*
@@ -938,20 +952,15 @@ xwl_present_unflip(ScreenPtr screen, uint64_t event_id)
 
 static present_screen_info_rec xwl_present_screen_info = {
     .version = PRESENT_SCREEN_INFO_VERSION,
-
     .get_crtc = xwl_present_get_crtc,
-
     .get_ust_msc = xwl_present_get_ust_msc,
     .queue_vblank = xwl_present_queue_vblank,
     .abort_vblank = xwl_present_abort_vblank,
     .flush = xwl_present_flush,
-
     .capabilities = PresentCapabilityNone,
-#ifdef GLAMOR_HAS_GBM
     .check_flip = xwl_present_check_flip,
     .flip = xwl_present_flip,
     .unflip = xwl_present_unflip,
-#endif
 };
 
 Bool
