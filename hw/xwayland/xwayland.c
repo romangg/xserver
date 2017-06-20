@@ -506,7 +506,7 @@ xwl_realize_window(WindowPtr window)
         ErrorF("Failed creating Present CRTC Fake for window.\n");
         // TODOX: error handling
     }
-    xwl_window->present_msc = 0;
+    xwl_window->present_msc = 1;
 
     wl_display_flush(xwl_screen->display);
 
