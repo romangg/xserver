@@ -428,10 +428,40 @@ send_surface_id_event(struct xwl_window *xwl_window)
                           &e, 1, SubstructureRedirectMask, NullGrab);
 }
 
+void xwl_present_reset_frame_callback(struct xwl_window *xwl_window);
+
+static void
+present_frame_callback(void *data,
+               struct wl_callback *callback,
+               uint32_t time)
+{
+    struct xwl_window *xwl_window = data;
+    ErrorF("XX present_frame_callback %i, %i, %i\n", xwl_window, time, xwl_window->present_msc);
+
+    /* TODOX:
+     * - inform present that there was a new "vblank" (?)
+     */
+    xwl_window->present_msc++;
+
+    wl_callback_destroy (xwl_window->present_frame_callback);
+    xwl_present_reset_frame_callback(xwl_window);
+}
+
+static const struct wl_callback_listener present_frame_listener = {
+    present_frame_callback
+};
+
+void
+xwl_present_reset_frame_callback(struct xwl_window *xwl_window)
+{
+    xwl_window->present_frame_callback = wl_surface_frame(xwl_window->surface);
+    wl_callback_add_listener(xwl_window->present_frame_callback, &present_frame_listener, xwl_window);
+}
+
 static Bool
 xwl_realize_window(WindowPtr window)
 {
-    ErrorF("XX xwl_realize_window 1\n");
+    ErrorF("XX xwl_realize_window BEGIN\n");
     ScreenPtr screen = window->drawable.pScreen;
     struct xwl_screen *xwl_screen;
     struct xwl_window *xwl_window;
@@ -506,7 +536,12 @@ xwl_realize_window(WindowPtr window)
         ErrorF("Failed creating Present CRTC Fake for window.\n");
         // TODOX: error handling
     }
+    xwl_window->uses_present = FALSE;
     xwl_window->present_msc = 1;
+    xwl_window->present_frame_callback = wl_surface_frame(xwl_window->surface);
+    wl_callback_add_listener(xwl_window->present_frame_callback, &present_frame_listener, xwl_window);
+
+    ErrorF("XX xwl_realize_window XX, %i\n", xwl_window);
 
     wl_display_flush(xwl_screen->display);
 
@@ -526,6 +561,7 @@ xwl_realize_window(WindowPtr window)
     DamageSetReportAfterOp(xwl_window->damage, TRUE);
 
     dixSetPrivate(&window->devPrivates, &xwl_window_private_key, xwl_window);
+    ErrorF("XX xwl_realize_window, PRIVATE_WINDOW %i\n", xwl_window_get(window));
     xorg_list_init(&xwl_window->link_damage);
 
     xwl_window_init_allow_commits(xwl_window);
@@ -604,19 +640,26 @@ frame_callback(void *data,
 {
     struct xwl_window *xwl_window = data;
 
-    /* TODOX:
-     * - inform present that there was a new "vblank"
-     * - if there is no new buffer made directly afterwards, we still need to listen to
-     *   frame_callback to increase present_msc ... but is this event created after every vblank or only once?
-     */
-    xwl_window->present_msc++;
-
     wl_callback_destroy (xwl_window->frame_callback);
     xwl_window->frame_callback = NULL;
 }
 
 static const struct wl_callback_listener frame_listener = {
     frame_callback
+};
+
+static void
+buffer_release(void *data, struct wl_buffer *buffer)
+{
+    ErrorF("XX buffer_release\n");
+    struct xwl_pixmap *xwl_pixmap = data;
+//    present_pixmap_idle(vblank->pixmap, vblank->window, vblank->serial, vblank->idle_fence);
+
+}
+
+// TODOX: const like above?
+static struct wl_buffer_listener wl_buffer_listener = {
+    buffer_release
 };
 
 static void
@@ -665,6 +708,8 @@ xwl_screen_post_damage(struct xwl_screen *xwl_screen)
 
     xorg_list_for_each_entry_safe(xwl_window, next_xwl_window,
                                   &xwl_screen->damage_window_list, link_damage) {
+        if (xwl_window->uses_present)
+            continue;
         /* If we're waiting on a frame callback from the server,
          * don't attach a new buffer. */
         if (xwl_window->frame_callback)
@@ -862,7 +907,10 @@ wm_selection_callback(CallbackListPtr *p, void *data, void *arg)
 static RRCrtcPtr
 xwl_present_get_crtc(WindowPtr window)
 {
-    struct xwl_window *xwl_window = xwl_window_get(window);
+    struct xwl_window *xwl_window = xwl_window_from_window(window);
+    ErrorF("XX xwl_present_get_crtc, %i\n", xwl_window);
+    if (xwl_window == NULL)
+        return NULL;
     return xwl_window->present_crtc_fake;
 }
 
@@ -870,6 +918,7 @@ static int
 xwl_present_get_ust_msc(RRCrtcPtr crtc, CARD64 *ust, CARD64 *msc)
 {
     struct xwl_window *xwl_window = crtc->devPrivate;
+    ErrorF("XX xwl_present_get_ust_msc %i\n", xwl_window);
     *msc = xwl_window->present_msc;
     return Success;
 }
@@ -884,7 +933,7 @@ xwl_present_queue_vblank(RRCrtcPtr crtc,
                         uint64_t msc)
 {
     // TODOX
-    return Success;
+    return BadAlloc;
 }
 
 /*
@@ -917,10 +966,10 @@ xwl_present_check_flip(RRCrtcPtr crtc,
                       Bool sync_flip)
 {
     ErrorF("XX xwl_present_check_flip\n");
-#ifndef GLAMOR_HAS_GBM
-    return FALSE;
-#else
+#ifdef GLAMOR_HAS_GBM
     return TRUE;
+#else
+    return FALSE;
 #endif
 }
 
@@ -931,14 +980,20 @@ xwl_present_flip(RRCrtcPtr crtc,
                 PixmapPtr pixmap,
                 Bool sync_flip)
 {
-    /* TODOX
-     * - create wl_buffer
-     * - commit it
-     * - connect to buffer release signal (?)
-     *
-     */
-
     ErrorF("XX xwl_present_flip\n");
+
+    struct xwl_window *xwl_window = crtc->devPrivate;
+
+    struct wl_buffer *buffer = xwl_glamor_pixmap_get_wl_buffer(pixmap);
+    if (buffer == NULL)
+        return FALSE;
+
+    xwl_window->uses_present = TRUE;
+
+    wl_surface_attach(xwl_window->surface, buffer, 0, 0);
+    wl_buffer_add_listener(buffer, &wl_buffer_listener, xwl_pixmap_get(pixmap));
+    wl_surface_commit(xwl_window->surface);
+
     return TRUE;
 }
 
