@@ -152,24 +152,12 @@ xwl_glamor_create_pixmap_for_bo(ScreenPtr screen, struct gbm_bo *bo, int depth)
     return pixmap;
 }
 
-
-struct wl_buffer *
-xwl_glamor_present_pixmap_get_wl_buffer(PixmapPtr pixmap)
-{
-    struct xwl_pixmap *xwl_pixmap = malloc(sizeof *xwl_pixmap);
-    if (xwl_pixmap == NULL)
-        return NULL;
-
-    xwl_pixmap_set_private(pixmap, xwl_pixmap);
-
-    return xwl_glamor_pixmap_get_wl_buffer(pixmap);
-}
-
 struct wl_buffer *
 xwl_glamor_pixmap_get_wl_buffer(PixmapPtr pixmap)
 {
     struct xwl_screen *xwl_screen = xwl_screen_get(pixmap->drawable.pScreen);
     struct xwl_pixmap *xwl_pixmap = xwl_pixmap_get(pixmap);
+    ErrorF("XX xwl_glamor_pixmap_get_wl_buffer 1, %i, %i, %i\n", xwl_pixmap, xwl_pixmap->bo, xwl_pixmap->buffer);
     int prime_fd;
 
     if (xwl_pixmap->buffer)

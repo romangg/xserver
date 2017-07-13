@@ -111,12 +111,20 @@ struct xwl_window {
     DamagePtr damage;
     struct xorg_list link_damage;
     struct wl_callback *frame_callback;
-    struct wl_callback *present_frame_callback;
     Bool allow_commits;
 
     Bool uses_present;
     RRCrtcPtr present_crtc_fake;
     uint64_t present_msc;
+
+//    struct xwl_present_event *buffer_commit;
+};
+
+
+struct xwl_present_event {
+    struct xwl_window *xwl_window;
+    uint64_t event_id;
+    uint64_t target_msc;
 };
 
 struct xwl_buffer {

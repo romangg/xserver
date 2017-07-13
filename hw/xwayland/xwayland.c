@@ -438,12 +438,16 @@ present_frame_callback(void *data,
     struct xwl_window *xwl_window = data;
     ErrorF("XX present_frame_callback %i, %i, %i\n", xwl_window, time, xwl_window->present_msc);
 
-    /* TODOX:
-     * - inform present that there was a new "vblank" (?)
-     */
+//    if (xwl_window->buffer_commit) {
+//        struct xwl_present_event *event = xwl_window->buffer_commit;
+//        xwl_window->buffer_commit = NULL;
+//        present_event_notify(event->event_id, 0, xwl_window->present_msc);
+//    }
+
+
     xwl_window->present_msc++;
 
-    wl_callback_destroy (xwl_window->present_frame_callback);
+    wl_callback_destroy(callback);
     xwl_present_reset_frame_callback(xwl_window);
 }
 
@@ -454,8 +458,8 @@ static const struct wl_callback_listener present_frame_listener = {
 void
 xwl_present_reset_frame_callback(struct xwl_window *xwl_window)
 {
-    xwl_window->present_frame_callback = wl_surface_frame(xwl_window->surface);
-    wl_callback_add_listener(xwl_window->present_frame_callback, &present_frame_listener, xwl_window);
+    struct wl_callback *callback = wl_surface_frame(xwl_window->surface);
+    wl_callback_add_listener(callback, &present_frame_listener, xwl_window);
 }
 
 static Bool
@@ -482,8 +486,6 @@ xwl_realize_window(WindowPtr window)
         RegionNull(&window->clipList);
         RegionNull(&window->borderClip);
     }
-
-    ErrorF("XX xwl_realize_window, %i, %i\n", xwl_screen->rootless, window->redirectDraw);
 
     if (xwl_screen->rootless) {
         if (window->redirectDraw != RedirectDrawManual)
@@ -538,10 +540,7 @@ xwl_realize_window(WindowPtr window)
     }
     xwl_window->uses_present = FALSE;
     xwl_window->present_msc = 1;
-    xwl_window->present_frame_callback = wl_surface_frame(xwl_window->surface);
-    wl_callback_add_listener(xwl_window->present_frame_callback, &present_frame_listener, xwl_window);
-
-    ErrorF("XX xwl_realize_window XX, %i\n", xwl_window);
+    xwl_present_reset_frame_callback(xwl_window);
 
     wl_display_flush(xwl_screen->display);
 
@@ -652,22 +651,21 @@ static void
 buffer_release(void *data, struct wl_buffer *buffer)
 {
     ErrorF("XX buffer_release\n");
-    struct xwl_pixmap *xwl_pixmap = data;
-//    present_pixmap_idle(vblank->pixmap, vblank->window, vblank->serial, vblank->idle_fence);
+    struct xwl_present_event *event = data;
 
+    present_event_notify(event->event_id, 0, event->xwl_window->present_msc);
+    free(event);
+    // TODOX: What else to free?
 }
 
 // TODOX: const like above?
-static struct wl_buffer_listener wl_buffer_listener = {
+static struct wl_buffer_listener release_listener = {
     buffer_release
 };
 
 static void
 xwl_window_post_damage(struct xwl_window *xwl_window)
 {
-    // TODOX: Do this only the window doesn't use Present,
-    //        otherwise create (and destroy) buffers via Present
-
     struct xwl_screen *xwl_screen = xwl_window->xwl_screen;
     RegionPtr region;
     BoxPtr box;
@@ -845,15 +843,18 @@ socket_handler(int fd, int ready, void *data)
 static void
 wakeup_handler(void *data, int err)
 {
+    ErrorF("XX wakeup_handler\n");
 }
 
 static void
 block_handler(void *data, void *timeout)
 {
+    ErrorF("XX block_handler 1\n");
     struct xwl_screen *xwl_screen = data;
 
     xwl_screen_post_damage(xwl_screen);
     xwl_dispatch_events (xwl_screen);
+    ErrorF("XX block_handler 2\n");
 }
 
 void
@@ -911,6 +912,7 @@ xwl_present_get_crtc(WindowPtr window)
     ErrorF("XX xwl_present_get_crtc, %i\n", xwl_window);
     if (xwl_window == NULL)
         return NULL;
+
     return xwl_window->present_crtc_fake;
 }
 
@@ -919,7 +921,9 @@ xwl_present_get_ust_msc(RRCrtcPtr crtc, CARD64 *ust, CARD64 *msc)
 {
     struct xwl_window *xwl_window = crtc->devPrivate;
     ErrorF("XX xwl_present_get_ust_msc %i\n", xwl_window);
+    *ust = 0;
     *msc = xwl_window->present_msc;
+
     return Success;
 }
 
@@ -980,8 +984,9 @@ xwl_present_flip(RRCrtcPtr crtc,
                 PixmapPtr pixmap,
                 Bool sync_flip)
 {
-    ErrorF("XX xwl_present_flip\n");
+    ErrorF("XX xwl_present_flip: %i\n", pixmap);
 
+    struct xwl_present_event *event;
     struct xwl_window *xwl_window = crtc->devPrivate;
 
     struct wl_buffer *buffer = xwl_glamor_pixmap_get_wl_buffer(pixmap);
@@ -990,19 +995,30 @@ xwl_present_flip(RRCrtcPtr crtc,
 
     xwl_window->uses_present = TRUE;
 
+    event = malloc(sizeof *event);
+    event->event_id = event_id;
+    event->target_msc = target_msc;
+
     wl_surface_attach(xwl_window->surface, buffer, 0, 0);
-    wl_buffer_add_listener(buffer, &wl_buffer_listener, xwl_pixmap_get(pixmap));
+
+    wl_buffer_add_listener(buffer, &release_listener, event);
     wl_surface_commit(xwl_window->surface);
+
+//    ErrorF("XX xwl_present_flip 2: %i, %i\n", xwl_window->buffer_commit, event);
+//    xwl_window->buffer_commit = event;
+
+    wl_display_flush(xwl_window->xwl_screen->display);
 
     return TRUE;
 }
 
 /*
- * Queue a flip back to the normal frame buffer - not relevant for Xwayland
+ * Queue a flip back to the normal frame buffer
  */
 static void
 xwl_present_unflip(ScreenPtr screen, uint64_t event_id)
 {
+    // TODOX: flip back to static buffer and set uses_present to false - how to identify window?
 }
 
 static present_screen_info_rec xwl_present_screen_info = {
@@ -1012,7 +1028,7 @@ static present_screen_info_rec xwl_present_screen_info = {
     .queue_vblank = xwl_present_queue_vblank,
     .abort_vblank = xwl_present_abort_vblank,
     .flush = xwl_present_flush,
-    .capabilities = PresentCapabilityNone,
+    .capabilities = PresentCapabilityAsync,
     .check_flip = xwl_present_check_flip,
     .flip = xwl_present_flip,
     .unflip = xwl_present_unflip,
