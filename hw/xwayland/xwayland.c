@@ -439,17 +439,7 @@ present_frame_callback(void *data,
     wl_callback_destroy(xwl_window->present_frame_callback);
     xwl_window->present_frame_callback = NULL;
 
-    assert(xwl_window->buffer_commit);
-
-    struct xwl_present_event *event = xwl_window->buffer_commit;
-    xwl_window->buffer_commit = NULL;
-
-    // signal that the flip is complete now
-    present_event_notify(event->event_id, 0, xwl_window->present_msc);
-
-    free(event);    //TODOX: better do this in buffer release?
-
-    // TODOX: this means msc only increases when we get callbacks, we can't use it in
+    // TODOX: this means msc only increases when we get callbacks. And we can't use it in
     //        the sense of a VSync counter, because when the window is occluded it might
     //        not increase at all.
     xwl_window->present_msc++;
@@ -904,7 +894,6 @@ static RRCrtcPtr
 xwl_present_get_crtc(WindowPtr window)
 {
     struct xwl_window *xwl_window = xwl_window_from_window(window);
-    ErrorF("XX xwl_present_get_crtc, %i\n", xwl_window);
     if (xwl_window == NULL)
         return NULL;
 
@@ -915,7 +904,7 @@ static int
 xwl_present_get_ust_msc(RRCrtcPtr crtc, CARD64 *ust, CARD64 *msc)
 {
     struct xwl_window *xwl_window = crtc->devPrivate;
-    ErrorF("XX xwl_present_get_ust_msc %i\n", xwl_window);
+    ErrorF("XX xwl_present_get_ust_msc %i: %i\n", xwl_window, xwl_window->present_msc);
     *ust = 0;
     *msc = xwl_window->present_msc;
 
@@ -947,15 +936,16 @@ xwl_present_abort_vblank(RRCrtcPtr crtc, uint64_t event_id, uint64_t msc)
     // TODOX
 }
 
-/*
- * Flush our batch buffer when requested by the Present extension.
- */
 static void
 xwl_present_flush(WindowPtr window)
 {
-    // TODOX: what does this mean in the context of wayland buffers?
+    // only used on copy
+
     ErrorF("YY xwl_present_flush\n");
 
+    // TODOX: responsible for seg faults on window close of VLC - how fix?
+//    struct xwl_window *xwl_window = xwl_window_from_window(window);
+//    wl_display_flush(xwl_window->xwl_screen->display);
 }
 
 
@@ -985,32 +975,29 @@ xwl_present_flip(RRCrtcPtr crtc,
     struct xwl_present_event *event;
     struct xwl_window *xwl_window = crtc->devPrivate;
 
-    assert(!xwl_window->present_frame_callback);
-
-    struct wl_buffer *buffer = xwl_glamor_pixmap_get_wl_buffer(pixmap);
-    if (buffer == NULL)
-        return FALSE;
-
     xwl_window->uses_present = TRUE;
 
-    event = malloc(sizeof *event);
-    event->event_id = event_id;
-    event->target_msc = target_msc;
+    struct wl_buffer *buffer = xwl_glamor_pixmap_get_wl_buffer(pixmap);
 
-    xwl_window->buffer_commit = event;
+//    event = malloc(sizeof *event);
+//    event->event_id = event_id;
+//    event->target_msc = target_msc;
 
     wl_surface_attach(xwl_window->surface, buffer, 0, 0);
     wl_surface_damage(xwl_window->surface, 0, 0, pixmap->drawable.width, pixmap->drawable.height);
 
-    xwl_window->present_frame_callback = wl_surface_frame(xwl_window->surface);
-    wl_callback_add_listener(xwl_window->present_frame_callback, &present_frame_listener, xwl_window);
+    if (!xwl_window->present_frame_callback) {
+        xwl_window->present_frame_callback = wl_surface_frame(xwl_window->surface);
+        wl_callback_add_listener(xwl_window->present_frame_callback, &present_frame_listener, xwl_window);
+    }
 
 //    wl_buffer_add_listener(buffer, &release_listener, event); //TODOX: we need make sure this only happens once per wl_buffer/Pixmap
     wl_surface_commit(xwl_window->surface);
 
-    ErrorF("XX xwl_present_flip NEW BUFFER COMMIT: %i, %i, %i\n", xwl_window->buffer_commit, event, xwl_window->frame_callback);
-
     wl_display_flush(xwl_window->xwl_screen->display);
+    present_event_notify(event_id, 0, xwl_window->present_msc);
+
+//    free(event);
 
     return TRUE;
 }
