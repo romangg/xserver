@@ -428,39 +428,36 @@ send_surface_id_event(struct xwl_window *xwl_window)
                           &e, 1, SubstructureRedirectMask, NullGrab);
 }
 
-void xwl_present_reset_frame_callback(struct xwl_window *xwl_window);
-
 static void
 present_frame_callback(void *data,
                struct wl_callback *callback,
                uint32_t time)
 {
     struct xwl_window *xwl_window = data;
-    ErrorF("XX present_frame_callback %i, %i, %i\n", xwl_window, time, xwl_window->present_msc);
+    ErrorF("XX present_frame_callback: %i, %i, %i\n", xwl_window, time, xwl_window->present_msc);
 
-//    if (xwl_window->buffer_commit) {
-//        struct xwl_present_event *event = xwl_window->buffer_commit;
-//        xwl_window->buffer_commit = NULL;
-//        present_event_notify(event->event_id, 0, xwl_window->present_msc);
-//    }
+    wl_callback_destroy(xwl_window->present_frame_callback);
+    xwl_window->present_frame_callback = NULL;
 
+    assert(xwl_window->buffer_commit);
 
+    struct xwl_present_event *event = xwl_window->buffer_commit;
+    xwl_window->buffer_commit = NULL;
+
+    // signal that the flip is complete now
+    present_event_notify(event->event_id, 0, xwl_window->present_msc);
+
+    free(event);    //TODOX: better do this in buffer release?
+
+    // TODOX: this means msc only increases when we get callbacks, we can't use it in
+    //        the sense of a VSync counter, because when the window is occluded it might
+    //        not increase at all.
     xwl_window->present_msc++;
-
-    wl_callback_destroy(callback);
-    xwl_present_reset_frame_callback(xwl_window);
 }
 
 static const struct wl_callback_listener present_frame_listener = {
     present_frame_callback
 };
-
-void
-xwl_present_reset_frame_callback(struct xwl_window *xwl_window)
-{
-    struct wl_callback *callback = wl_surface_frame(xwl_window->surface);
-    wl_callback_add_listener(callback, &present_frame_listener, xwl_window);
-}
 
 static Bool
 xwl_realize_window(WindowPtr window)
@@ -540,7 +537,6 @@ xwl_realize_window(WindowPtr window)
     }
     xwl_window->uses_present = FALSE;
     xwl_window->present_msc = 1;
-    xwl_present_reset_frame_callback(xwl_window);
 
     wl_display_flush(xwl_screen->display);
 
@@ -653,13 +649,11 @@ buffer_release(void *data, struct wl_buffer *buffer)
     ErrorF("XX buffer_release\n");
     struct xwl_present_event *event = data;
 
-    present_event_notify(event->event_id, 0, event->xwl_window->present_msc);
-    free(event);
+//    free(event);
     // TODOX: What else to free?
 }
 
-// TODOX: const like above?
-static struct wl_buffer_listener release_listener = {
+static const struct wl_buffer_listener release_listener = {
     buffer_release
 };
 
@@ -702,6 +696,7 @@ xwl_window_post_damage(struct xwl_window *xwl_window)
 static void
 xwl_screen_post_damage(struct xwl_screen *xwl_screen)
 {
+    ErrorF("XX xwl_screen_post_damage\n");
     struct xwl_window *xwl_window, *next_xwl_window;
 
     xorg_list_for_each_entry_safe(xwl_window, next_xwl_window,
@@ -936,6 +931,7 @@ xwl_present_queue_vblank(RRCrtcPtr crtc,
                         uint64_t event_id,
                         uint64_t msc)
 {
+    ErrorF("XX xwl_present_queue_vblank\n");
     // TODOX
     return BadAlloc;
 }
@@ -947,6 +943,7 @@ xwl_present_queue_vblank(RRCrtcPtr crtc,
 static void
 xwl_present_abort_vblank(RRCrtcPtr crtc, uint64_t event_id, uint64_t msc)
 {
+    ErrorF("XX xwl_present_abort_vblank\n");
     // TODOX
 }
 
@@ -984,10 +981,11 @@ xwl_present_flip(RRCrtcPtr crtc,
                 PixmapPtr pixmap,
                 Bool sync_flip)
 {
-    ErrorF("XX xwl_present_flip: %i\n", pixmap);
 
     struct xwl_present_event *event;
     struct xwl_window *xwl_window = crtc->devPrivate;
+
+    assert(!xwl_window->present_frame_callback);
 
     struct wl_buffer *buffer = xwl_glamor_pixmap_get_wl_buffer(pixmap);
     if (buffer == NULL)
@@ -999,13 +997,18 @@ xwl_present_flip(RRCrtcPtr crtc,
     event->event_id = event_id;
     event->target_msc = target_msc;
 
-    wl_surface_attach(xwl_window->surface, buffer, 0, 0);
+    xwl_window->buffer_commit = event;
 
-    wl_buffer_add_listener(buffer, &release_listener, event);
+    wl_surface_attach(xwl_window->surface, buffer, 0, 0);
+    wl_surface_damage(xwl_window->surface, 0, 0, pixmap->drawable.width, pixmap->drawable.height);
+
+    xwl_window->present_frame_callback = wl_surface_frame(xwl_window->surface);
+    wl_callback_add_listener(xwl_window->present_frame_callback, &present_frame_listener, xwl_window);
+
+//    wl_buffer_add_listener(buffer, &release_listener, event); //TODOX: we need make sure this only happens once per wl_buffer/Pixmap
     wl_surface_commit(xwl_window->surface);
 
-//    ErrorF("XX xwl_present_flip 2: %i, %i\n", xwl_window->buffer_commit, event);
-//    xwl_window->buffer_commit = event;
+    ErrorF("XX xwl_present_flip NEW BUFFER COMMIT: %i, %i, %i\n", xwl_window->buffer_commit, event, xwl_window->frame_callback);
 
     wl_display_flush(xwl_window->xwl_screen->display);
 

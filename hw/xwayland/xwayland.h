@@ -116,8 +116,9 @@ struct xwl_window {
     Bool uses_present;
     RRCrtcPtr present_crtc_fake;
     uint64_t present_msc;
+    struct wl_callback *present_frame_callback;
 
-//    struct xwl_present_event *buffer_commit;
+    struct xwl_present_event *buffer_commit;
 };
 
 
