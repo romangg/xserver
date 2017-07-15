@@ -991,9 +991,9 @@ xwl_present_abort_vblank(RRCrtcPtr crtc, uint64_t event_id, uint64_t msc)
     ErrorF("XX xwl_present_abort_vblank\n");
 
     struct xwl_window *xwl_window = crtc->devPrivate;
-    struct xwl_present_event *event;
+    struct xwl_present_event *event, *tmp;
 
-    xorg_list_for_each_entry(event, &xwl_window->present_event_list, list) {
+    xorg_list_for_each_entry_safe(event, tmp, &xwl_window->present_event_list, list) {
         if (event->event_id == event_id) {
             xorg_list_del(&event->list);
             free(event);
