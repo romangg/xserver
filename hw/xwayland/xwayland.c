@@ -428,26 +428,63 @@ send_surface_id_event(struct xwl_window *xwl_window)
                           &e, 1, SubstructureRedirectMask, NullGrab);
 }
 
+void xwl_present_commit_buffer_frame(struct xwl_window *xwl_window);
+
 static void
 present_frame_callback(void *data,
                struct wl_callback *callback,
                uint32_t time)
 {
+    struct xwl_present_event *event, *tmp;
     struct xwl_window *xwl_window = data;
-    ErrorF("XX present_frame_callback: %i, %i, %i\n", xwl_window, time, xwl_window->present_msc);
+    ErrorF("XX present_frame_callback: %i, %i\n", xwl_window, xwl_window->present_msc);
 
     wl_callback_destroy(xwl_window->present_frame_callback);
     xwl_window->present_frame_callback = NULL;
 
-    // TODOX: this means msc only increases when we get callbacks. And we can't use it in
-    //        the sense of a VSync counter, because when the window is occluded it might
-    //        not increase at all.
-    xwl_window->present_msc++;
+    uint64_t msc = ++xwl_window->present_msc;
+
+    /* Check events */
+    xorg_list_for_each_entry_safe(event, tmp, &xwl_window->present_event_list, list) {
+        if (event->target_msc <= msc) {
+            present_event_notify(event->event_id, 0, msc);
+            xorg_list_del(&event->list);
+            free(event);
+        }
+    }
+
+    if (!xorg_list_is_empty(&xwl_window->present_event_list)) {
+        // dummy commit to receive a callback on next frame
+        xwl_present_commit_buffer_frame(xwl_window);
+    }
 }
 
 static const struct wl_callback_listener present_frame_listener = {
     present_frame_callback
 };
+
+void
+xwl_present_commit_buffer_frame(struct xwl_window *xwl_window)
+{
+    ErrorF("XX xwl_present_commit_buffer_frame\n");
+
+    PixmapPtr pixmap = xwl_window->cur_pixmap;
+
+    struct wl_buffer *buffer = xwl_glamor_pixmap_get_wl_buffer(pixmap);
+    wl_surface_attach(xwl_window->surface, buffer, 0, 0);
+
+    wl_surface_damage(xwl_window->surface, 0, 0, pixmap->drawable.width, pixmap->drawable.height);
+
+    if (!xwl_window->present_frame_callback) {
+        xwl_window->present_frame_callback = wl_surface_frame(xwl_window->surface);
+        wl_callback_add_listener(xwl_window->present_frame_callback, &present_frame_listener, xwl_window);
+    }
+
+//    wl_buffer_add_listener(buffer, &release_listener, event); //TODOX: we need make sure this only happens once per wl_buffer/Pixmap
+    wl_surface_commit(xwl_window->surface);
+
+    wl_display_flush(xwl_window->xwl_screen->display);
+}
 
 static Bool
 xwl_realize_window(WindowPtr window)
@@ -494,6 +531,7 @@ xwl_realize_window(WindowPtr window)
         ErrorF("wl_display_create_surface failed\n");
         goto err;
     }
+    xorg_list_init(&xwl_window->present_event_list);
 
     if (!xwl_screen->rootless) {
         xwl_window->shell_surface =
@@ -639,8 +677,7 @@ buffer_release(void *data, struct wl_buffer *buffer)
     ErrorF("XX buffer_release\n");
     struct xwl_present_event *event = data;
 
-//    free(event);
-    // TODOX: What else to free?
+    //TODOX: how to translate this in Present extension?
 }
 
 static const struct wl_buffer_listener release_listener = {
@@ -650,6 +687,7 @@ static const struct wl_buffer_listener release_listener = {
 static void
 xwl_window_post_damage(struct xwl_window *xwl_window)
 {
+    ErrorF("XX xwl_window_post_damage: %i\n", xwl_window);
     struct xwl_screen *xwl_screen = xwl_window->xwl_screen;
     RegionPtr region;
     BoxPtr box;
@@ -660,6 +698,7 @@ xwl_window_post_damage(struct xwl_window *xwl_window)
 
     region = DamageRegion(xwl_window->damage);
     pixmap = (*xwl_screen->screen->GetWindowPixmap) (xwl_window->window);
+    xwl_window->cur_pixmap = pixmap;
 
 #ifdef GLAMOR_HAS_GBM
     if (xwl_screen->glamor)
@@ -920,26 +959,53 @@ xwl_present_queue_vblank(RRCrtcPtr crtc,
                         uint64_t event_id,
                         uint64_t msc)
 {
-    ErrorF("XX xwl_present_queue_vblank\n");
-    // TODOX
-    return BadAlloc;
+    ErrorF("XX xwl_present_queue_vblank: %i, %i\n", event_id, msc);
+
+    struct xwl_window *xwl_window = crtc->devPrivate;
+    struct xwl_present_event *event;
+
+    event = malloc(sizeof *event);
+
+    if (!event)
+        return BadAlloc;
+    event->event_id = event_id;
+    event->target_msc = msc;
+
+    xorg_list_add(&event->list, &xwl_window->present_event_list);
+
+    if (!xwl_window->present_frame_callback) {
+        // dummy commit to receive a callback on next frame
+        xwl_present_commit_buffer_frame(xwl_window);
+    }
+
+    return Success;
 }
 
 /*
- * Remove a pending vblank event from the DRM queue so that it is not reported
+ * Remove a pending vblank event so that it is not reported
  * to the extension
  */
 static void
 xwl_present_abort_vblank(RRCrtcPtr crtc, uint64_t event_id, uint64_t msc)
 {
     ErrorF("XX xwl_present_abort_vblank\n");
-    // TODOX
+
+    struct xwl_window *xwl_window = crtc->devPrivate;
+    struct xwl_present_event *event;
+
+    xorg_list_for_each_entry(event, &xwl_window->present_event_list, list) {
+        if (event->event_id == event_id) {
+            xorg_list_del(&event->list);
+            free(event);
+            return;
+        }
+    }
 }
 
 static void
 xwl_present_flush(WindowPtr window)
 {
-    // only used on copy
+    // only used on copy  TODOX: not necessary at all because of that?
 
     ErrorF("YY xwl_present_flush\n");
 
@@ -971,33 +1037,15 @@ xwl_present_flip(RRCrtcPtr crtc,
                 PixmapPtr pixmap,
                 Bool sync_flip)
 {
+    ErrorF("SS xwl_present_flip\n");
 
-    struct xwl_present_event *event;
     struct xwl_window *xwl_window = crtc->devPrivate;
 
     xwl_window->uses_present = TRUE;
+    xwl_window->cur_pixmap = pixmap;
 
-    struct wl_buffer *buffer = xwl_glamor_pixmap_get_wl_buffer(pixmap);
-
-//    event = malloc(sizeof *event);
-//    event->event_id = event_id;
-//    event->target_msc = target_msc;
-
-    wl_surface_attach(xwl_window->surface, buffer, 0, 0);
-    wl_surface_damage(xwl_window->surface, 0, 0, pixmap->drawable.width, pixmap->drawable.height);
-
-    if (!xwl_window->present_frame_callback) {
-        xwl_window->present_frame_callback = wl_surface_frame(xwl_window->surface);
-        wl_callback_add_listener(xwl_window->present_frame_callback, &present_frame_listener, xwl_window);
-    }
-
-//    wl_buffer_add_listener(buffer, &release_listener, event); //TODOX: we need make sure this only happens once per wl_buffer/Pixmap
-    wl_surface_commit(xwl_window->surface);
-
-    wl_display_flush(xwl_window->xwl_screen->display);
+    xwl_present_commit_buffer_frame(xwl_window);
     present_event_notify(event_id, 0, xwl_window->present_msc);
-
-//    free(event);
 
     return TRUE;
 }
@@ -1009,6 +1057,7 @@ static void
 xwl_present_unflip(ScreenPtr screen, uint64_t event_id)
 {
     // TODOX: flip back to static buffer and set uses_present to false - how to identify window?
+//    xwl_window->cur_pixmap = pixmap;
 }
 
 static present_screen_info_rec xwl_present_screen_info = {

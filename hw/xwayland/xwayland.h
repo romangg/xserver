@@ -117,13 +117,17 @@ struct xwl_window {
     RRCrtcPtr present_crtc_fake;
     uint64_t present_msc;
     struct wl_callback *present_frame_callback;
+    struct xorg_list present_event_list;
+
+    PixmapPtr cur_pixmap;
 };
 
 
 struct xwl_present_event {
-    struct xwl_window *xwl_window;
     uint64_t event_id;
     uint64_t target_msc;
+
+    struct xorg_list list;
 };
 
 struct xwl_buffer {
