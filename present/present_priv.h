@@ -43,6 +43,8 @@ typedef struct present_fence *present_fence_ptr;
 
 typedef struct present_notify present_notify_rec, *present_notify_ptr;
 
+static struct xorg_list present_crtc;
+
 struct present_notify {
     struct xorg_list    window_list;
     WindowPtr           window;
@@ -83,18 +85,7 @@ typedef struct present_screen_priv {
     DestroyWindowProcPtr        DestroyWindow;
     ClipNotifyProcPtr           ClipNotify;
 
-    present_vblank_ptr          flip_pending;
-    uint64_t                    unflip_event_id;
-
     uint32_t                    fake_interval;
-
-    /* Currently active flipped pixmap and fence */
-    RRCrtcPtr                   flip_crtc;
-    WindowPtr                   flip_window;
-    uint32_t                    flip_serial;
-    PixmapPtr                   flip_pixmap;
-    present_fence_ptr           flip_idle_fence;
-    Bool                        flip_sync;
 
     present_screen_info_ptr     info;
 } present_screen_priv_rec, *present_screen_priv_ptr;
@@ -113,6 +104,34 @@ present_screen_priv(ScreenPtr screen)
 {
     return (present_screen_priv_ptr)dixLookupPrivate(&(screen)->devPrivates, &present_screen_private_key);
 }
+
+typedef struct present_crtc_priv {
+    RRCrtcPtr           crtc;
+    struct xorg_list    present_list;
+
+    present_vblank_ptr  flip_pending;
+    uint64_t            unflip_event_id;
+
+    /* Currently active flipped pixmap and fence */
+    WindowPtr           flip_window;
+    uint32_t            flip_serial;
+    PixmapPtr           flip_pixmap;
+    present_fence_ptr   flip_idle_fence;
+    Bool                flip_sync;
+} present_crtc_priv_rec, *present_crtc_priv_ptr;
+
+#define PresentCrtcNeverSet     ((RRCrtcPtr) 1)
+
+extern DevPrivateKeyRec present_crtc_private_key;
+
+static inline present_crtc_priv_ptr
+present_crtc_priv(RRCrtcPtr crtc)
+{
+    return crtc->devPrivatePresent;
+}
+
+present_crtc_priv_ptr
+present_get_crtc_priv(RRCrtcPtr crtc, Bool create);
 
 /*
  * Each window has a list of clients and event masks
@@ -190,7 +209,7 @@ void
 present_restore_screen_pixmap(ScreenPtr screen);
 
 void
-present_set_abort_flip(ScreenPtr screen);
+present_set_abort_flip(RRCrtcPtr crtc);
 
 void
 present_check_flip_window(WindowPtr window);

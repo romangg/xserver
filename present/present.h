@@ -80,7 +80,7 @@ typedef Bool (*present_flip_ptr) (RRCrtcPtr crtc,
  *
  * present_event_notify should be called with 'event_id' when the unflip occurs.
  */
-typedef void (*present_unflip_ptr) (ScreenPtr screen,
+typedef void (*present_unflip_ptr) (RRCrtcPtr crtc,
                                     uint64_t event_id);
 
 #define PRESENT_SCREEN_INFO_VERSION        0

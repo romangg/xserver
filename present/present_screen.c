@@ -31,6 +31,27 @@ DevPrivateKeyRec present_screen_private_key;
 DevPrivateKeyRec present_window_private_key;
 
 /*
+ * Get a pointer to a present crtc private, creating if necessary
+ */
+present_crtc_priv_ptr
+present_get_crtc_priv(RRCrtcPtr crtc, Bool create)
+{
+    present_crtc_priv_ptr crtc_priv = present_crtc_priv(crtc);
+
+    if (!create || crtc_priv != NULL)
+        return crtc_priv;
+    crtc_priv = calloc (1, sizeof (present_crtc_priv_rec));
+    if (!crtc_priv)
+        return NULL;
+    crtc->devPrivatePresent = crtc_priv;
+    crtc_priv->crtc = crtc;
+
+    xorg_list_append(&crtc_priv->present_list, &present_crtc);
+
+    return crtc_priv;
+}
+
+/*
  * Get a pointer to a present window private, creating if necessary
  */
 present_window_priv_ptr
@@ -88,17 +109,31 @@ static void
 present_clear_window_flip(WindowPtr window)
 {
     ScreenPtr                   screen = window->drawable.pScreen;
-    present_screen_priv_ptr     screen_priv = present_screen_priv(screen);
-    present_vblank_ptr          flip_pending = screen_priv->flip_pending;
+    RRCrtcPtr                   crtc;
+    present_window_priv_ptr     window_priv = present_window_priv(window);
+    present_crtc_priv_ptr       crtc_priv;
+    present_vblank_ptr          flip_pending;
+
+    if (!window_priv)
+        return;
+    crtc = window_priv->crtc;
+    if (!crtc)
+        return;
+    crtc_priv = present_crtc_priv(crtc);
+    if (!crtc_priv)
+        return;
+
+    flip_pending = crtc_priv->flip_pending;
 
     if (flip_pending && flip_pending->window == window) {
-        present_set_abort_flip(screen);
+        present_set_abort_flip(crtc);
         flip_pending->window = NULL;
     }
-    if (screen_priv->flip_window == window) {
+    if (crtc_priv->flip_window == window) {
         present_restore_screen_pixmap(screen);
-        screen_priv->flip_window = NULL;
+        crtc_priv->flip_window = NULL;
     }
+
 }
 
 /*

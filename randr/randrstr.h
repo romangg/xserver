@@ -122,6 +122,7 @@ struct _rrCrtc {
     CARD16 *gammaBlue;
     CARD16 *gammaGreen;
     void *devPrivate;
+    void *devPrivatePresent;    //TODOX: do this as devPrivates with key?
     Bool transforms;
     RRTransformRec client_pending_transform;
     RRTransformRec client_current_transform;
