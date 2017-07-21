@@ -131,6 +131,10 @@ present_check_flip(RRCrtcPtr    crtc,
     WindowPtr                   root = screen->root;
     present_screen_priv_ptr     screen_priv = present_screen_priv(screen);
 
+    ErrorF("PP present_check_flip 1: %i, %i, %i, %i |\n", crtc, window, root->winSize, &window->clipList);
+
+    ErrorF("PP present_check_flip 1.1: %i, %i, %i, %i\n", window->drawable.x, window->drawable.y, window->drawable.width, window->drawable.height);
+    ErrorF("PP present_check_flip 1.2: %i, %i, %i, %i\n", screen->x, screen->y, screen->width, screen->height);
     if (!screen_priv)
         return FALSE;
 
@@ -144,15 +148,26 @@ present_check_flip(RRCrtcPtr    crtc,
     if (!screen_priv->info->flip)
         return FALSE;
 
+#if 0
     /* Make sure the window hasn't been redirected with Composite */
     window_pixmap = screen->GetWindowPixmap(window);
     if (window_pixmap != screen->GetScreenPixmap(screen) &&
         window_pixmap != screen_priv->flip_pixmap &&
         window_pixmap != present_flip_pending_pixmap(screen))
         return FALSE;
+#endif
 
+//    ErrorF("PP present_check_flip 2: %i, %i, %i\n", RegionEqual(&window->clipList, &root->winSize), valid,RegionEqual(valid, &root->winSize) );
     /* Check for full-screen window */
+#if 0   //TODOX: not in Xwayland
     if (!RegionEqual(&window->clipList, &root->winSize)) {
+        return FALSE;
+    }
+#endif
+    // TODOX: This doesn't respect clipping of other windows above (not needed for Xwayland though)
+    if (window->drawable.x != screen->x || window->drawable.y != screen->y ||   //TODOX: windows x,y values are probably always 0 in Xwayland
+            window->drawable.width != screen->width || window->drawable.height != screen->height) {
+        ErrorF("PP present_check_flip NOT FULLSCREEN\n");
         return FALSE;
     }
 
@@ -160,12 +175,12 @@ present_check_flip(RRCrtcPtr    crtc,
     if (x_off || y_off) {
         return FALSE;
     }
-
+#if 0   //TODOX: not in Xwayland
     /* Make sure the area marked as valid fills the screen */
     if (valid && !RegionEqual(valid, &root->winSize)) {
         return FALSE;
     }
-
+#endif
     /* Does the window match the pixmap exactly? */
     if (window->drawable.x != 0 || window->drawable.y != 0 ||
 #ifdef COMPOSITE
@@ -183,6 +198,7 @@ present_check_flip(RRCrtcPtr    crtc,
             return FALSE;
         }
     }
+    ErrorF("PP present_check_flip SUCCESS\n");
 
     return TRUE;
 }
@@ -389,6 +405,7 @@ present_set_tree_pixmap_visit(WindowPtr window, void *data)
     struct pixmap_visit *visit = data;
     ScreenPtr           screen = window->drawable.pScreen;
 
+    ErrorF("PP present_set_tree_pixmap_visit: %i\n", window, visit->old, visit->new);
     if ((*screen->GetWindowPixmap)(window) != visit->old)
         return WT_DONTWALKCHILDREN;
     (*screen->SetWindowPixmap)(window, visit->new);
@@ -403,6 +420,7 @@ present_set_tree_pixmap(WindowPtr window,
     struct pixmap_visit visit;
     ScreenPtr           screen = window->drawable.pScreen;
 
+    ErrorF("PP present_set_tree_pixmap: %i, %i, %i\n", window, expected, pixmap);
     visit.old = (*screen->GetWindowPixmap)(window);
     if (expected && visit.old != expected)
         return;
@@ -420,7 +438,9 @@ present_restore_screen_pixmap(ScreenPtr screen)
     PixmapPtr screen_pixmap = (*screen->GetScreenPixmap)(screen);
     PixmapPtr flip_pixmap;
     WindowPtr flip_window;
+    ErrorF("PP present_restore_screen_pixmap\n");
 
+//#if 0   //TODOX
     if (screen_priv->flip_pending) {
         flip_window = screen_priv->flip_pending->window;
         flip_pixmap = screen_priv->flip_pending->pixmap;
@@ -445,6 +465,7 @@ present_restore_screen_pixmap(ScreenPtr screen)
         present_set_tree_pixmap(flip_window, flip_pixmap, screen_pixmap);
     if (screen->root)
         present_set_tree_pixmap(screen->root, NULL, screen_pixmap);
+//#endif
 }
 
 void
@@ -461,6 +482,7 @@ present_set_abort_flip(ScreenPtr screen)
 static void
 present_unflip(ScreenPtr screen)
 {
+    ErrorF("PP present_unflip\n");
     present_screen_priv_ptr screen_priv = present_screen_priv(screen);
 
     assert (!screen_priv->unflip_event_id);
@@ -687,6 +709,7 @@ present_execute(present_vblank_ptr vblank, uint64_t ust, uint64_t crtc_msc)
             if (present_flip(vblank->crtc, vblank->event_id, vblank->target_msc, vblank->pixmap, vblank->sync_flip)) {
                 RegionPtr damage;
 
+//#if 0   //TODOX
                 /* Fix window pixmaps:
                  *  1) Restore previous flip window pixmap
                  *  2) Set current flip window pixmap to the new pixmap
@@ -697,7 +720,7 @@ present_execute(present_vblank_ptr vblank, uint64_t ust, uint64_t crtc_msc)
                                             (*screen->GetScreenPixmap)(screen));
                 present_set_tree_pixmap(vblank->window, NULL, vblank->pixmap);
                 present_set_tree_pixmap(screen->root, NULL, vblank->pixmap);
-
+//#endif
                 /* Report update region as damaged
                  */
                 if (vblank->update) {
@@ -798,6 +821,7 @@ present_pixmap(WindowPtr window,
     present_window_priv_ptr     window_priv = present_get_window_priv(window, TRUE);
     present_screen_priv_ptr     screen_priv = present_screen_priv(screen);
 
+    ErrorF("PP present_pixmap 1: %i, %i\n", target_crtc, window);
     if (!window_priv)
         return BadAlloc;
 
@@ -812,6 +836,7 @@ present_pixmap(WindowPtr window,
         if (!target_crtc || target_crtc == PresentCrtcNeverSet)
             target_crtc = present_get_crtc(window);
     }
+    ErrorF("PP present_pixmap 2: %i, %i\n", target_crtc, window);
 
     ret = present_get_ust_msc(screen, target_crtc, &ust, &crtc_msc);
 
