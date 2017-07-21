@@ -100,6 +100,8 @@ struct xwl_screen {
     struct gbm_device *gbm;
     struct glamor_context *glamor_ctx;
 
+    WindowPtr flipping_window;
+
     Atom allow_commits_prop;
 };
 
@@ -113,7 +115,6 @@ struct xwl_window {
     struct wl_callback *frame_callback;
     Bool allow_commits;
 
-    Bool uses_present;
     RRCrtcPtr present_crtc_fake;
     uint64_t present_msc;
     struct wl_callback *present_frame_callback;

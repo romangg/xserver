@@ -464,7 +464,7 @@ static const struct wl_callback_listener present_frame_listener = {
 };
 
 void
-xwl_present_commit_buffer_frame(struct xwl_window *xwl_window)
+xwl_present_commit_buffer_frame(struct xwl_window *xwl_window)  //TODOX: move down in this file
 {
     ErrorF("XX xwl_present_commit_buffer_frame\n");
 
@@ -489,7 +489,7 @@ xwl_present_commit_buffer_frame(struct xwl_window *xwl_window)
 static Bool
 xwl_realize_window(WindowPtr window)
 {
-    ErrorF("XX xwl_realize_window BEGIN\n");
+    ErrorF("XX xwl_realize_window BEGIN %i\n", window);
     ScreenPtr screen = window->drawable.pScreen;
     struct xwl_screen *xwl_screen;
     struct xwl_window *xwl_window;
@@ -563,7 +563,6 @@ xwl_realize_window(WindowPtr window)
         ErrorF("Failed creating Present CRTC Fake for window.\n");
         // TODOX: error handling
     }
-    xwl_window->uses_present = FALSE;
     xwl_window->present_msc = 1;
 
     wl_display_flush(xwl_screen->display);
@@ -584,10 +583,10 @@ xwl_realize_window(WindowPtr window)
     DamageSetReportAfterOp(xwl_window->damage, TRUE);
 
     dixSetPrivate(&window->devPrivates, &xwl_window_private_key, xwl_window);
-    ErrorF("XX xwl_realize_window, PRIVATE_WINDOW %i\n", xwl_window_get(window));
     xorg_list_init(&xwl_window->link_damage);
 
     xwl_window_init_allow_commits(xwl_window);
+    ErrorF("XX xwl_realize_window END %i\n", window);
 
     return ret;
 
@@ -600,9 +599,13 @@ err:
     return FALSE;
 }
 
+static void
+xwl_present_unflip(ScreenPtr screen, uint64_t event_id);
+
 static Bool
 xwl_unrealize_window(WindowPtr window)
 {
+    ErrorF("XX xwl_unrealize_window BEGIN %i\n", window, &window->drawable);
     ScreenPtr screen = window->drawable.pScreen;
     struct xwl_screen *xwl_screen;
     struct xwl_window *xwl_window;
@@ -642,10 +645,14 @@ xwl_unrealize_window(WindowPtr window)
     DamageDestroy(xwl_window->damage);
     if (xwl_window->frame_callback)
         wl_callback_destroy(xwl_window->frame_callback);
+
+    if (xwl_screen->flipping_window == window)
+        xwl_present_unflip(screen, 0);
     RRCrtcDestroy(xwl_window->present_crtc_fake);
 
     free(xwl_window);
     dixSetPrivate(&window->devPrivates, &xwl_window_private_key, NULL);
+    ErrorF("XX xwl_unrealize_window END %i\n", window);
 
     return ret;
 }
@@ -730,7 +737,7 @@ xwl_screen_post_damage(struct xwl_screen *xwl_screen)
 
     xorg_list_for_each_entry_safe(xwl_window, next_xwl_window,
                                   &xwl_screen->damage_window_list, link_damage) {
-        if (xwl_window->uses_present)
+        if (xwl_window == xwl_screen->flipping_window)
             continue;
         /* If we're waiting on a frame callback from the server,
          * don't attach a new buffer. */
@@ -1022,9 +1029,12 @@ xwl_present_check_flip(RRCrtcPtr crtc,
                       PixmapPtr pixmap,
                       Bool sync_flip)
 {
-    ErrorF("XX xwl_present_check_flip\n");
+    ErrorF("XX xwl_present_check_flip: %i\n", window);
+    struct xwl_window *xwl_window = crtc->devPrivate;
+    struct xwl_screen *xwl_screen = xwl_window->xwl_screen;
 #ifdef GLAMOR_HAS_GBM
-    return TRUE;
+    ErrorF("XX xwl_present_check_flip: %i\n", xwl_screen->flipping_window);
+    return TRUE;//!xwl_screen->flipping_window || xwl_screen->flipping_window == window;
 #else
     return FALSE;
 #endif
@@ -1037,11 +1047,18 @@ xwl_present_flip(RRCrtcPtr crtc,
                 PixmapPtr pixmap,
                 Bool sync_flip)
 {
-    ErrorF("SS xwl_present_flip\n");
+    ErrorF("SSXX xwl_present_flip XXSS\n");
 
     struct xwl_window *xwl_window = crtc->devPrivate;
+    struct xwl_screen *xwl_screen = xwl_window->xwl_screen;
 
-    xwl_window->uses_present = TRUE;
+    /* check again for delayed flips */
+    if (!xwl_present_check_flip(crtc, xwl_window->window, pixmap, sync_flip)) {
+        ErrorF("SSXX xwl_present_flip ERROR\n");
+        return FALSE;
+    }
+
+    xwl_screen->flipping_window = xwl_window->window;
     xwl_window->cur_pixmap = pixmap;
 
     xwl_present_commit_buffer_frame(xwl_window);
@@ -1056,8 +1073,25 @@ xwl_present_flip(RRCrtcPtr crtc,
 static void
 xwl_present_unflip(ScreenPtr screen, uint64_t event_id)
 {
-    // TODOX: flip back to static buffer and set uses_present to false - how to identify window?
-//    xwl_window->cur_pixmap = pixmap;
+    ErrorF("XX xwl_present_unflip\n");
+
+    struct xwl_screen *xwl_screen = xwl_screen_get(screen);
+    WindowPtr window = xwl_screen->flipping_window;
+    struct xwl_window *xwl_window;
+
+    if (!window)
+        return;
+
+    xwl_window = xwl_window_get(window);
+
+    if (xwl_window->present_frame_callback) {
+        wl_callback_destroy(xwl_window->present_frame_callback);
+        xwl_window->present_frame_callback = NULL;
+    }
+
+    xwl_screen->flipping_window = NULL;
+
+    ErrorF("XX xwl_present_unflip END\n");
 }
 
 static present_screen_info_rec xwl_present_screen_info = {
