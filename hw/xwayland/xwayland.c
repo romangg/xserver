@@ -611,6 +611,7 @@ xwl_unrealize_window(WindowPtr window)
     struct xwl_window *xwl_window;
     struct xwl_seat *xwl_seat;
     Bool ret;
+    struct xwl_present_event *event, *tmp;
 
     xwl_screen = xwl_screen_get(screen);
 
@@ -648,6 +649,19 @@ xwl_unrealize_window(WindowPtr window)
 
     if (xwl_screen->flipping_window == window)
         xwl_present_unflip(screen, 0);
+
+    if (xwl_window->present_frame_callback) {
+        wl_callback_destroy(xwl_window->present_frame_callback);
+        xwl_window->present_frame_callback = NULL;
+    }
+
+    /* Clean up remaining events */
+    xorg_list_for_each_entry_safe(event, tmp, &xwl_window->present_event_list, list) {
+        present_event_notify(event->event_id, 0, xwl_window->present_msc);
+        xorg_list_del(&event->list);
+        free(event);
+    }
+
     RRCrtcDestroy(xwl_window->present_crtc_fake);
 
     free(xwl_window);
@@ -939,6 +953,7 @@ wm_selection_callback(CallbackListPtr *p, void *data, void *arg)
 static RRCrtcPtr
 xwl_present_get_crtc(WindowPtr window)
 {
+    ErrorF("XX xwl_present_get_crtc: %i\n", window);
     struct xwl_window *xwl_window = xwl_window_from_window(window);
     if (xwl_window == NULL)
         return NULL;
@@ -981,7 +996,7 @@ xwl_present_queue_vblank(RRCrtcPtr crtc,
     xorg_list_add(&event->list, &xwl_window->present_event_list);
 
     if (!xwl_window->present_frame_callback) {
-        // dummy commit to receive a callback on next frame
+        /* dummy commit to receive a callback on next frame */
         xwl_present_commit_buffer_frame(xwl_window);
     }
 
@@ -1023,17 +1038,56 @@ xwl_present_flush(WindowPtr window)
 
 
 
+struct pixmap_visit {
+    PixmapPtr   old;
+    PixmapPtr   new;
+};
+
+static int
+xwl_present_set_tree_pixmap_visit(WindowPtr window, void *data)
+{
+    struct pixmap_visit *visit = data;
+    ScreenPtr           screen = window->drawable.pScreen;
+
+    ErrorF("XX xwl_present_set_tree_pixmap_visit: %i\n", window, visit->old, visit->new);
+    if ((*screen->GetWindowPixmap)(window) != visit->old)
+        return WT_DONTWALKCHILDREN;
+    (*screen->SetWindowPixmap)(window, visit->new);
+    return WT_WALKCHILDREN;
+}
+
+static void
+xwl_present_set_tree_pixmap(WindowPtr window,
+                        PixmapPtr expected,
+                        PixmapPtr pixmap)
+{
+    struct pixmap_visit visit;
+    ScreenPtr           screen = window->drawable.pScreen;
+
+    ErrorF("XX xwl_present_set_tree_pixmap: %i, %i, %i\n", window, expected, pixmap);
+    visit.old = (*screen->GetWindowPixmap)(window);
+    if (expected && visit.old != expected)
+        return;
+
+    visit.new = pixmap;
+    if (visit.old == visit.new)
+        return;
+    TraverseTree(window, xwl_present_set_tree_pixmap_visit, &visit);
+}
+
+
+
 static Bool
 xwl_present_check_flip(RRCrtcPtr crtc,
                       WindowPtr window,
                       PixmapPtr pixmap,
                       Bool sync_flip)
 {
-    ErrorF("XX xwl_present_check_flip: %i\n", window);
+    ErrorF("XX xwl_present_check_flip 1: %i, %i, %i\n", crtc, window, pixmap);
     struct xwl_window *xwl_window = crtc->devPrivate;
     struct xwl_screen *xwl_screen = xwl_window->xwl_screen;
 #ifdef GLAMOR_HAS_GBM
-    ErrorF("XX xwl_present_check_flip: %i\n", xwl_screen->flipping_window);
+    ErrorF("XX xwl_present_check_flip 2: %i\n", xwl_screen->flipping_window);
     return TRUE;//!xwl_screen->flipping_window || xwl_screen->flipping_window == window;
 #else
     return FALSE;
@@ -1049,19 +1103,35 @@ xwl_present_flip(RRCrtcPtr crtc,
 {
     ErrorF("SSXX xwl_present_flip XXSS\n");
 
-    struct xwl_window *xwl_window = crtc->devPrivate;
-    struct xwl_screen *xwl_screen = xwl_window->xwl_screen;
+    struct xwl_window   *xwl_window = crtc->devPrivate;
+    struct xwl_screen   *xwl_screen = xwl_window->xwl_screen;
+    WindowPtr           window = xwl_window->window;
+    ScreenPtr           screen = xwl_screen->screen;
 
     /* check again for delayed flips */
-    if (!xwl_present_check_flip(crtc, xwl_window->window, pixmap, sync_flip)) {
+    if (!xwl_present_check_flip(crtc, window, pixmap, sync_flip)) {
         ErrorF("SSXX xwl_present_flip ERROR\n");
         return FALSE;
     }
 
-    xwl_screen->flipping_window = xwl_window->window;
+    /* if we come from another window, unflip it,
+     * also store the restore pixmap for 'window' */
+    if (xwl_screen->flipping_window != window) {
+        xwl_present_unflip(screen, 0);
+
+        xwl_window->present_restore_pixmap = (*screen->GetWindowPixmap)(window);
+    }
+
+    (*screen->SetWindowPixmap)(window, pixmap);
+//    xwl_present_set_tree_pixmap(window, NULL, pixmap);
+
+    xwl_screen->flipping_window = window;
     xwl_window->cur_pixmap = pixmap;
 
     xwl_present_commit_buffer_frame(xwl_window);
+
+    /* although probably not yet painted on the screen,
+     * all our flips apply immediately respective to the Wayland compositor */
     present_event_notify(event_id, 0, xwl_window->present_msc);
 
     return TRUE;
@@ -1076,18 +1146,17 @@ xwl_present_unflip(ScreenPtr screen, uint64_t event_id)
     ErrorF("XX xwl_present_unflip\n");
 
     struct xwl_screen *xwl_screen = xwl_screen_get(screen);
-    WindowPtr window = xwl_screen->flipping_window;
-    struct xwl_window *xwl_window;
+    WindowPtr flipping_window = xwl_screen->flipping_window;
+    struct xwl_window *xwl_flipping_window;
 
-    if (!window)
+    if (!flipping_window)
         return;
 
-    xwl_window = xwl_window_get(window);
+    xwl_flipping_window = xwl_window_get(flipping_window);
 
-    if (xwl_window->present_frame_callback) {
-        wl_callback_destroy(xwl_window->present_frame_callback);
-        xwl_window->present_frame_callback = NULL;
-    }
+    (*screen->SetWindowPixmap)(flipping_window, xwl_flipping_window->present_restore_pixmap);
+//    xwl_present_set_tree_pixmap(flipping_window, NULL, xwl_flipping_window->present_restore_pixmap);
+    xwl_flipping_window->present_restore_pixmap = NULL;
 
     xwl_screen->flipping_window = NULL;
 
@@ -1101,7 +1170,7 @@ static present_screen_info_rec xwl_present_screen_info = {
     .queue_vblank = xwl_present_queue_vblank,
     .abort_vblank = xwl_present_abort_vblank,
     .flush = xwl_present_flush,
-    .capabilities = PresentCapabilityAsync,
+    .capabilities = PresentCapabilityAsync | XwaylandCapability,
     .check_flip = xwl_present_check_flip,
     .flip = xwl_present_flip,
     .unflip = xwl_present_unflip,

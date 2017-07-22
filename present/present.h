@@ -84,6 +84,7 @@ typedef void (*present_unflip_ptr) (ScreenPtr screen,
                                     uint64_t event_id);
 
 #define PRESENT_SCREEN_INFO_VERSION        0
+#define XwaylandCapability                 99
 
 typedef struct present_screen_info {
     uint32_t                            version;

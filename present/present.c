@@ -164,7 +164,7 @@ present_check_flip(RRCrtcPtr    crtc,
         return FALSE;
     }
 #endif
-    // TODOX: This doesn't respect clipping of other windows above (not needed for Xwayland though)
+    // TODOX: This doesn't respect clipping of other windows above (not needed for Xwayland though) - do we need it at all?
     if (window->drawable.x != screen->x || window->drawable.y != screen->y ||   //TODOX: windows x,y values are probably always 0 in Xwayland
             window->drawable.width != screen->width || window->drawable.height != screen->height) {
         ErrorF("PP present_check_flip NOT FULLSCREEN\n");
@@ -380,11 +380,13 @@ present_flip_idle(ScreenPtr screen)
 {
     present_screen_priv_ptr screen_priv = present_screen_priv(screen);
 
-    if (screen_priv->flip_pixmap) {
+    if (screen_priv->flip_window && screen_priv->flip_pixmap) { //TODOX: why do we need to test on flip_window in Xwayland?
         present_pixmap_idle(screen_priv->flip_pixmap, screen_priv->flip_window,
                             screen_priv->flip_serial, screen_priv->flip_idle_fence);
         if (screen_priv->flip_idle_fence)
             present_fence_destroy(screen_priv->flip_idle_fence);
+
+        ErrorF("PP present_flip_idle: %i, %i\n", screen_priv->flip_window, screen_priv->flip_pixmap);
         dixDestroyPixmap(screen_priv->flip_pixmap, screen_priv->flip_pixmap->drawable.id);
         screen_priv->flip_crtc = NULL;
         screen_priv->flip_window = NULL;
@@ -405,7 +407,7 @@ present_set_tree_pixmap_visit(WindowPtr window, void *data)
     struct pixmap_visit *visit = data;
     ScreenPtr           screen = window->drawable.pScreen;
 
-    ErrorF("PP present_set_tree_pixmap_visit: %i\n", window, visit->old, visit->new);
+    ErrorF("PP present_set_tree_pixmap_visit: %i, %i, %i\n", window, visit->old, visit->new);
     if ((*screen->GetWindowPixmap)(window) != visit->old)
         return WT_DONTWALKCHILDREN;
     (*screen->SetWindowPixmap)(window, visit->new);
@@ -440,7 +442,10 @@ present_restore_screen_pixmap(ScreenPtr screen)
     WindowPtr flip_window;
     ErrorF("PP present_restore_screen_pixmap\n");
 
-//#if 0   //TODOX
+    /* on Xwayland don't try to restore, we do this in the DDX itself */
+    if (screen_priv->info->capabilities & XwaylandCapability)
+        return;
+
     if (screen_priv->flip_pending) {
         flip_window = screen_priv->flip_pending->window;
         flip_pixmap = screen_priv->flip_pending->pixmap;
@@ -461,11 +466,11 @@ present_restore_screen_pixmap(ScreenPtr screen)
     /* Switch back to using the screen pixmap now to avoid
      * 2D applications drawing to the wrong pixmap.
      */
+    ErrorF("PP present_restore_screen_pixmap 2: %i, %i\n", flip_window, flip_pixmap);
     if (flip_window)
         present_set_tree_pixmap(flip_window, flip_pixmap, screen_pixmap);
     if (screen->root)
         present_set_tree_pixmap(screen->root, NULL, screen_pixmap);
-//#endif
 }
 
 void
@@ -710,16 +715,24 @@ present_execute(present_vblank_ptr vblank, uint64_t ust, uint64_t crtc_msc)
                 RegionPtr damage;
 
 //#if 0   //TODOX
+
+
+                /* on Xwayland we do this in the DDX */
+                if (!(screen_priv->info->capabilities & XwaylandCapability)) {
+
                 /* Fix window pixmaps:
                  *  1) Restore previous flip window pixmap
                  *  2) Set current flip window pixmap to the new pixmap
                  */
+                    ErrorF("PP present_execute NO XWAYLAND: %i, %i\n", screen_priv->flip_window, screen_priv->flip_pixmap);
                 if (screen_priv->flip_window && screen_priv->flip_window != window)
                     present_set_tree_pixmap(screen_priv->flip_window,
                                             screen_priv->flip_pixmap,
                                             (*screen->GetScreenPixmap)(screen));
                 present_set_tree_pixmap(vblank->window, NULL, vblank->pixmap);
                 present_set_tree_pixmap(screen->root, NULL, vblank->pixmap);
+
+                }
 //#endif
                 /* Report update region as damaged
                  */

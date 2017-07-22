@@ -120,6 +120,7 @@ struct xwl_window {
     struct wl_callback *present_frame_callback;
     struct xorg_list present_event_list;
 
+    PixmapPtr present_restore_pixmap;
     PixmapPtr cur_pixmap;
 };
 
