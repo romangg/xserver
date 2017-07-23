@@ -121,7 +121,7 @@ struct xwl_window {
     struct xorg_list present_event_list;
 
     PixmapPtr present_restore_pixmap;
-    PixmapPtr cur_pixmap;   //TODOX: remove? use GetWindowPixmap
+    PixmapPtr current_pixmap;
 };
 
 

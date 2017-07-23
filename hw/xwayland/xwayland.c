@@ -468,7 +468,7 @@ xwl_present_commit_buffer_frame(struct xwl_window *xwl_window)  //TODOX: move do
 {
     ErrorF("XX xwl_present_commit_buffer_frame\n");
 
-    PixmapPtr pixmap = xwl_window->cur_pixmap;
+    PixmapPtr pixmap = xwl_window->current_pixmap;
 
     struct wl_buffer *buffer = xwl_glamor_pixmap_get_wl_buffer(pixmap);
     wl_surface_attach(xwl_window->surface, buffer, 0, 0);
@@ -715,7 +715,7 @@ xwl_window_post_damage(struct xwl_window *xwl_window)
 
     region = DamageRegion(xwl_window->damage);
     pixmap = (*xwl_screen->screen->GetWindowPixmap) (xwl_window->window);
-    xwl_window->cur_pixmap = pixmap;
+    xwl_window->current_pixmap = pixmap;
 
 #ifdef GLAMOR_HAS_GBM
     if (xwl_screen->glamor)
@@ -1104,7 +1104,7 @@ xwl_present_flip(RRCrtcPtr crtc,
     WindowPtr           window = xwl_window->window;
     ScreenPtr           screen = xwl_screen->screen;
 
-    xwl_window->cur_pixmap = pixmap;
+    xwl_window->current_pixmap = pixmap;
 
     return TRUE;
 }
@@ -1151,7 +1151,7 @@ xwl_present_switch_pixmap(WindowPtr window, PixmapPtr pixmap, uint64_t flip_even
     } else {
         if (flipping_window) {
             /* we come from another window, restore it */
-//            xwl_present_set_tree_pixmap(flipping_window, xwl_flipping_window->cur_pixmap, xwl_flipping_window->present_restore_pixmap);
+//            xwl_present_set_tree_pixmap(flipping_window, xwl_flipping_window->current_pixmap, xwl_flipping_window->present_restore_pixmap);
             (*screen->SetWindowPixmap)(flipping_window, xwl_flipping_window->present_restore_pixmap);
         }
         xwl_window->present_restore_pixmap = (*screen->GetWindowPixmap)(window);
