@@ -149,10 +149,14 @@ present_check_flip(RRCrtcPtr    crtc,
         return FALSE;
     }
 
-    /* We omit these tests in Xwayland, because:
+    /* We replace these tests in Xwayland, because:
      * - in rootless mode there is no associated winSize
      * - we can ignore the Composite extension */
-    if (!(screen_priv->info->capabilities & XwaylandCapability)) {
+    if (screen_priv->info->capabilities & XwaylandCapability) {
+        if (window->drawable.x != screen->x || window->drawable.y != screen->y ||
+                       window->drawable.width != screen->width || window->drawable.height != screen->height)
+                return FALSE;
+    } else {
         /* Make sure the window hasn't been redirected with Composite */
         window_pixmap = screen->GetWindowPixmap(window);
         if (window_pixmap != screen->GetScreenPixmap(screen) &&
@@ -376,7 +380,6 @@ present_flip_idle(ScreenPtr screen)
         if (screen_priv->flip_idle_fence)
             present_fence_destroy(screen_priv->flip_idle_fence);
 
-        ErrorF("PP present_flip_idle: %i, %i\n", screen_priv->flip_window, screen_priv->flip_pixmap);
         dixDestroyPixmap(screen_priv->flip_pixmap, screen_priv->flip_pixmap->drawable.id);
         screen_priv->flip_crtc = NULL;
         screen_priv->flip_window = NULL;
@@ -397,7 +400,6 @@ present_set_tree_pixmap_visit(WindowPtr window, void *data)
     struct pixmap_visit *visit = data;
     ScreenPtr           screen = window->drawable.pScreen;
 
-    ErrorF("PP present_set_tree_pixmap_visit: %i, %i, %i\n", window, visit->old, visit->new);
     if ((*screen->GetWindowPixmap)(window) != visit->old)
         return WT_DONTWALKCHILDREN;
     (*screen->SetWindowPixmap)(window, visit->new);
@@ -412,7 +414,6 @@ present_set_tree_pixmap(WindowPtr window,
     struct pixmap_visit visit;
     ScreenPtr           screen = window->drawable.pScreen;
 
-    ErrorF("PP present_set_tree_pixmap: %i, %i, %i\n", window, expected, pixmap);
     visit.old = (*screen->GetWindowPixmap)(window);
     if (expected && visit.old != expected)
         return;
@@ -430,7 +431,6 @@ present_restore_screen_pixmap(ScreenPtr screen)
     PixmapPtr screen_pixmap = (*screen->GetScreenPixmap)(screen);
     PixmapPtr flip_pixmap;
     WindowPtr flip_window;
-    ErrorF("PP present_restore_screen_pixmap\n");
 
     if (screen_priv->flip_pending) {
         flip_window = screen_priv->flip_pending->window;
