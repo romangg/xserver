@@ -183,43 +183,6 @@ xwl_present_flush(WindowPtr window)
      * but in this case we wait on the next block_handler. */
 }
 
-struct pixmap_visit {
-    PixmapPtr   old;
-    PixmapPtr   new;
-};
-
-static int
-xwl_present_set_tree_pixmap_visit(WindowPtr window, void *data)
-{
-    struct pixmap_visit *visit = data;
-    ScreenPtr           screen = window->drawable.pScreen;
-
-    ErrorF("XX xwl_present_set_tree_pixmap_visit: %i\n", window, visit->old, visit->new);
-    if ((*screen->GetWindowPixmap)(window) != visit->old)
-        return WT_DONTWALKCHILDREN;
-    (*screen->SetWindowPixmap)(window, visit->new);
-    return WT_WALKCHILDREN;
-}
-
-static void
-xwl_present_set_tree_pixmap(WindowPtr window,
-                        PixmapPtr expected,
-                        PixmapPtr pixmap)
-{
-    struct pixmap_visit visit;
-    ScreenPtr           screen = window->drawable.pScreen;
-
-    ErrorF("XX xwl_present_set_tree_pixmap: %i, %i, %i\n", window, expected, pixmap);
-    visit.old = (*screen->GetWindowPixmap)(window);
-    if (expected && visit.old != expected)
-        return;
-
-    visit.new = pixmap;
-    if (visit.old == visit.new)
-        return;
-    TraverseTree(window, xwl_present_set_tree_pixmap_visit, &visit);
-}
-
 static Bool
 xwl_present_check_flip(RRCrtcPtr crtc,
                       WindowPtr window,
@@ -269,7 +232,6 @@ xwl_present_switch_pixmap(WindowPtr window, PixmapPtr pixmap, uint64_t flip_even
     if (flipping_window == window){
         if (!flip_event_id) {
             /* restoring requested */
-//            xwl_present_set_tree_pixmap(window, pixmap, xwl_flipping_window->present_restore_pixmap);
             (*screen->SetWindowPixmap)(window, xwl_window->present_restore_pixmap);
 
             xwl_window->current_pixmap = xwl_window->present_restore_pixmap;
@@ -278,11 +240,9 @@ xwl_present_switch_pixmap(WindowPtr window, PixmapPtr pixmap, uint64_t flip_even
     } else {
         if (flipping_window) {
             /* we come from another window, restore it */
-//            xwl_present_set_tree_pixmap(flipping_window, xwl_flipping_window->current_pixmap, xwl_flipping_window->present_restore_pixmap);
             (*screen->SetWindowPixmap)(flipping_window, xwl_flipping_window->present_restore_pixmap);
         }
         xwl_window->present_restore_pixmap = (*screen->GetWindowPixmap)(window);
-//        xwl_present_set_tree_pixmap(window, NULL, pixmap);
         (*screen->SetWindowPixmap)(window, pixmap);
         xwl_screen->flipping_window = window;
     }
