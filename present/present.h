@@ -87,7 +87,8 @@ typedef void (*present_unflip_ptr) (ScreenPtr screen,
  */
 typedef Bool (*present_switch_pixmap_ptr) (WindowPtr window, PixmapPtr pixmap, uint64_t flip_event_id);
 
-#define PRESENT_SCREEN_INFO_VERSION        0
+#define PRESENT_SCREEN_INFO_VERSION         0
+#define XwaylandCapability                  8
 
 typedef struct present_screen_info {
     uint32_t                            version;

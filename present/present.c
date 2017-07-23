@@ -144,39 +144,33 @@ present_check_flip(RRCrtcPtr    crtc,
     if (!screen_priv->info->flip)
         return FALSE;
 
-#if 0
-    /* Make sure the window hasn't been redirected with Composite */
-    window_pixmap = screen->GetWindowPixmap(window);
-    if (window_pixmap != screen->GetScreenPixmap(screen) &&
-        window_pixmap != screen_priv->flip_pixmap &&
-        window_pixmap != present_flip_pending_pixmap(screen))
-        return FALSE;
-#endif
-
-//    ErrorF("PP present_check_flip 2: %i, %i, %i\n", RegionEqual(&window->clipList, &root->winSize), valid,RegionEqual(valid, &root->winSize) );
-    /* Check for full-screen window */
-#if 0   //TODOX: not in Xwayland
-    if (!RegionEqual(&window->clipList, &root->winSize)) {
-        return FALSE;
-    }
-#endif
-    // TODOX: This doesn't respect clipping of other windows above (not needed for Xwayland though) - do we need it at all?
-    if (window->drawable.x != screen->x || window->drawable.y != screen->y ||   //TODOX: windows x,y values are probably always 0 in Xwayland
-            window->drawable.width != screen->width || window->drawable.height != screen->height) {
-        ErrorF("PP present_check_flip NOT FULLSCREEN\n");
-        return FALSE;
-    }
-
     /* Source pixmap must align with window exactly */
     if (x_off || y_off) {
         return FALSE;
     }
-#if 0   //TODOX: not in Xwayland
-    /* Make sure the area marked as valid fills the screen */
-    if (valid && !RegionEqual(valid, &root->winSize)) {
-        return FALSE;
+
+    /* We omit these tests in Xwayland, because:
+     * - in rootless mode there is no associated winSize
+     * - we can ignore the Composite extension */
+    if (!(screen_priv->info->capabilities & XwaylandCapability)) {
+        /* Make sure the window hasn't been redirected with Composite */
+        window_pixmap = screen->GetWindowPixmap(window);
+        if (window_pixmap != screen->GetScreenPixmap(screen) &&
+            window_pixmap != screen_priv->flip_pixmap &&
+            window_pixmap != present_flip_pending_pixmap(screen))
+            return FALSE;
+
+        /* Check for full-screen window */
+        if (!RegionEqual(&window->clipList, &root->winSize)) {
+            return FALSE;
+        }
+
+        /* Make sure the area marked as valid fills the screen */
+        if (valid && !RegionEqual(valid, &root->winSize)) {
+            return FALSE;
+        }
     }
-#endif
+
     /* Does the window match the pixmap exactly? */
     if (window->drawable.x != 0 || window->drawable.y != 0 ||
 #ifdef COMPOSITE
