@@ -77,9 +77,16 @@ static const struct wl_callback_listener present_frame_listener = {
 void
 xwl_present_commit_buffer_frame(struct xwl_window *xwl_window)
 {
-    ErrorF("XX xwl_present_commit_buffer_frame\n");
+    PixmapPtr pixmap;
 
-    PixmapPtr pixmap = xwl_window->current_pixmap;
+    // TODOX: this doesn't seem to be the solution. I need a better understanding
+    //       of what pixmap I can use for the dummy commit
+    if (xwl_window->current_pixmap->drawable.pScreen)
+        pixmap = xwl_window->current_pixmap;
+    else
+        pixmap = (*xwl_window->xwl_screen->screen->GetWindowPixmap) (xwl_window->window);
+
+    ErrorF("XX xwl_present_commit_buffer_frame: %i, %i\n", pixmap, pixmap->drawable.pScreen);
 
     struct wl_buffer *buffer = xwl_glamor_pixmap_get_wl_buffer(pixmap);
     wl_surface_attach(xwl_window->surface, buffer, 0, 0);
@@ -128,7 +135,10 @@ xwl_present_queue_vblank(RRCrtcPtr crtc,
                         uint64_t event_id,
                         uint64_t msc)
 {
-    ErrorF("XX xwl_present_queue_vblank: %i, %i\n", event_id, msc);
+    /* Queuing events doesn't work yet: call to xwl_present_commit_buffer_frame
+     * for the dummy commit has on special actions a pixmap without screen */
+    return BadAlloc;
+    /* */
 
     struct xwl_window *xwl_window = crtc->devPrivate;
     struct xwl_present_event *event;
@@ -235,15 +245,6 @@ xwl_present_flip(RRCrtcPtr crtc,
                 PixmapPtr pixmap,
                 Bool sync_flip)
 {
-    ErrorF("SSXX xwl_present_flip XXSS\n");
-
-    struct xwl_window   *xwl_window = crtc->devPrivate;
-    struct xwl_screen   *xwl_screen = xwl_window->xwl_screen;
-    WindowPtr           window = xwl_window->window;
-    ScreenPtr           screen = xwl_screen->screen;
-
-    xwl_window->current_pixmap = pixmap;
-
     return TRUE;
 }
 
@@ -284,6 +285,8 @@ xwl_present_switch_pixmap(WindowPtr window, PixmapPtr pixmap, uint64_t flip_even
             /* restoring requested */
 //            xwl_present_set_tree_pixmap(window, pixmap, xwl_flipping_window->present_restore_pixmap);
             (*screen->SetWindowPixmap)(window, xwl_window->present_restore_pixmap);
+
+            xwl_window->current_pixmap = xwl_window->present_restore_pixmap;
             xwl_screen->flipping_window = NULL;
         }
     } else {
@@ -301,6 +304,8 @@ xwl_present_switch_pixmap(WindowPtr window, PixmapPtr pixmap, uint64_t flip_even
     if (flip_event_id) {
         xwl_present_commit_buffer_frame(xwl_window);
         present_event_notify(flip_event_id, 0, xwl_window->present_msc);
+
+        xwl_window->current_pixmap = pixmap;
     }
 }
 
