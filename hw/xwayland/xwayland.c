@@ -429,7 +429,6 @@ send_surface_id_event(struct xwl_window *xwl_window)
 static Bool
 xwl_realize_window(WindowPtr window)
 {
-    ErrorF("XX xwl_realize_window BEGIN %i\n", window);
     ScreenPtr screen = window->drawable.pScreen;
     struct xwl_screen *xwl_screen;
     struct xwl_window *xwl_window;
@@ -524,7 +523,6 @@ xwl_realize_window(WindowPtr window)
     xorg_list_init(&xwl_window->link_damage);
 
     xwl_window_init_allow_commits(xwl_window);
-    ErrorF("XX xwl_realize_window END %i\n", window);
 
     return ret;
 
@@ -540,7 +538,6 @@ err:
 static Bool
 xwl_unrealize_window(WindowPtr window)
 {
-    ErrorF("XX xwl_unrealize_window BEGIN %i\n", window, &window->drawable);
     ScreenPtr screen = window->drawable.pScreen;
     struct xwl_screen *xwl_screen;
     struct xwl_window *xwl_window;
@@ -599,7 +596,6 @@ xwl_unrealize_window(WindowPtr window)
 
     free(xwl_window);
     dixSetPrivate(&window->devPrivates, &xwl_window_private_key, NULL);
-    ErrorF("XX xwl_unrealize_window END %i\n", window);
 
     return ret;
 }
@@ -628,7 +624,6 @@ static const struct wl_callback_listener frame_listener = {
 static void
 xwl_window_post_damage(struct xwl_window *xwl_window)
 {
-    ErrorF("XX xwl_window_post_damage: %i\n", xwl_window);
     struct xwl_screen *xwl_screen = xwl_window->xwl_screen;
     RegionPtr region;
     BoxPtr box;
@@ -666,7 +661,6 @@ xwl_window_post_damage(struct xwl_window *xwl_window)
 static void
 xwl_screen_post_damage(struct xwl_screen *xwl_screen)
 {
-    ErrorF("XX xwl_screen_post_damage\n");
     struct xwl_window *xwl_window, *next_xwl_window;
 
     xorg_list_for_each_entry_safe(xwl_window, next_xwl_window,
@@ -808,18 +802,15 @@ socket_handler(int fd, int ready, void *data)
 static void
 wakeup_handler(void *data, int err)
 {
-    ErrorF("XX wakeup_handler\n");
 }
 
 static void
 block_handler(void *data, void *timeout)
 {
-    ErrorF("XX block_handler 1\n");
     struct xwl_screen *xwl_screen = data;
 
     xwl_screen_post_damage(xwl_screen);
     xwl_dispatch_events (xwl_screen);
-    ErrorF("XX block_handler 2\n");
 }
 
 void

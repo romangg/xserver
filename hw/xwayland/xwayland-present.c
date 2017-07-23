@@ -48,7 +48,6 @@ present_frame_callback(void *data,
 {
     struct xwl_present_event *event, *tmp;
     struct xwl_window *xwl_window = data;
-    ErrorF("XX present_frame_callback: %i, %i\n", xwl_window, xwl_window->present_msc);
 
     wl_callback_destroy(xwl_window->present_frame_callback);
     xwl_window->present_frame_callback = NULL;
@@ -107,7 +106,6 @@ xwl_present_commit_buffer_frame(struct xwl_window *xwl_window)
 static RRCrtcPtr
 xwl_present_get_crtc(WindowPtr window)
 {
-    ErrorF("XX xwl_present_get_crtc: %i\n", window);
     struct xwl_window *xwl_window = xwl_window_from_window(window);
     if (xwl_window == NULL)
         return NULL;
@@ -119,7 +117,6 @@ static int
 xwl_present_get_ust_msc(RRCrtcPtr crtc, CARD64 *ust, CARD64 *msc)
 {
     struct xwl_window *xwl_window = crtc->devPrivate;
-    ErrorF("XX xwl_present_get_ust_msc %i: %i\n", xwl_window, xwl_window->present_msc);
     *ust = 0;
     *msc = xwl_window->present_msc;
 
@@ -167,8 +164,6 @@ xwl_present_queue_vblank(RRCrtcPtr crtc,
 static void
 xwl_present_abort_vblank(RRCrtcPtr crtc, uint64_t event_id, uint64_t msc)
 {
-    ErrorF("XX xwl_present_abort_vblank\n");
-
     struct xwl_window *xwl_window = crtc->devPrivate;
     struct xwl_present_event *event, *tmp;
 
@@ -231,7 +226,6 @@ xwl_present_check_flip(RRCrtcPtr crtc,
                       PixmapPtr pixmap,
                       Bool sync_flip)
 {
-    ErrorF("XX xwl_present_check_flip 1: %i, %i, %i\n", crtc, window, pixmap);
     struct xwl_window *xwl_window = crtc->devPrivate;
     struct xwl_screen *xwl_screen = xwl_window->xwl_screen;
 
@@ -254,8 +248,6 @@ xwl_present_flip(RRCrtcPtr crtc,
 static void
 xwl_present_unflip(ScreenPtr screen, uint64_t event_id)
 {
-    ErrorF("XX xwl_present_unflip\n");
-
     struct xwl_screen *xwl_screen = xwl_screen_get(screen);
 
     xwl_screen->flipping_window = NULL;
@@ -326,6 +318,5 @@ static present_screen_info_rec xwl_present_screen_info = {
 Bool
 xwl_present_init(ScreenPtr screen)
 {
-    ErrorF("XX xwl_present_init\n");
     return present_screen_init(screen, &xwl_present_screen_info);
 }

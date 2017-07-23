@@ -192,7 +192,6 @@ present_check_flip(RRCrtcPtr    crtc,
             return FALSE;
         }
     }
-    ErrorF("PP present_check_flip SUCCESS\n");
 
     return TRUE;
 }
@@ -458,7 +457,6 @@ present_restore_screen_pixmap(ScreenPtr screen)
     /* Switch back to using the screen pixmap now to avoid
      * 2D applications drawing to the wrong pixmap.
      */
-    ErrorF("PP present_restore_screen_pixmap 2: %i, %i\n", flip_window, flip_pixmap);
     if (flip_window)
         present_set_tree_pixmap(flip_window, flip_pixmap, screen_pixmap);
     if (screen->root)
@@ -479,7 +477,6 @@ present_set_abort_flip(ScreenPtr screen)
 static void
 present_unflip(ScreenPtr screen)
 {
-    ErrorF("PP present_unflip\n");
     present_screen_priv_ptr screen_priv = present_screen_priv(screen);
 
     assert (!screen_priv->unflip_event_id);
@@ -822,7 +819,6 @@ present_pixmap(WindowPtr window,
     present_window_priv_ptr     window_priv = present_get_window_priv(window, TRUE);
     present_screen_priv_ptr     screen_priv = present_screen_priv(screen);
 
-    ErrorF("PP present_pixmap 1: %i, %i\n", target_crtc, window);
     if (!window_priv)
         return BadAlloc;
 
@@ -837,7 +833,6 @@ present_pixmap(WindowPtr window,
         if (!target_crtc || target_crtc == PresentCrtcNeverSet)
             target_crtc = present_get_crtc(window);
     }
-    ErrorF("PP present_pixmap 2: %i, %i\n", target_crtc, window);
 
     ret = present_get_ust_msc(screen, target_crtc, &ust, &crtc_msc);
 
