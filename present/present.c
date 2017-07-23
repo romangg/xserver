@@ -443,7 +443,8 @@ present_restore_screen_pixmap(ScreenPtr screen)
 
     if (screen_priv->info->switch_pixmap) {
         /* Let the DDX do the restoring if it wants to. */
-        (*screen_priv->info->switch_pixmap) (flip_window, flip_pixmap, 0);
+        if (flip_window)
+            (*screen_priv->info->switch_pixmap) (flip_window, flip_pixmap, 0);
         return;
     }
 

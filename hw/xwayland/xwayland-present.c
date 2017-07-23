@@ -79,7 +79,7 @@ xwl_present_commit_buffer_frame(struct xwl_window *xwl_window)
     PixmapPtr pixmap;
 
     // TODOX: this doesn't seem to be the solution. I need a better understanding
-    //       of what pixmap I can use for the dummy commit
+    //       of what pixmap I can use for the dummy commit. Is it sometimes just not possible?
     if (xwl_window->current_pixmap->drawable.pScreen)
         pixmap = xwl_window->current_pixmap;
     else
@@ -260,13 +260,7 @@ xwl_present_unflip(ScreenPtr screen, uint64_t event_id)
 static void
 xwl_present_switch_pixmap(WindowPtr window, PixmapPtr pixmap, uint64_t flip_event_id)
 {
-    if (!window)
-        return;
-
     struct xwl_window   *xwl_window = xwl_window_from_window(window);
-    if (!xwl_window)
-        return;
-
     struct xwl_screen   *xwl_screen = xwl_window->xwl_screen;
     ScreenPtr           screen = xwl_screen->screen;
     WindowPtr           flipping_window = xwl_screen->flipping_window;
