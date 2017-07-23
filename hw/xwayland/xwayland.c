@@ -428,64 +428,6 @@ send_surface_id_event(struct xwl_window *xwl_window)
                           &e, 1, SubstructureRedirectMask, NullGrab);
 }
 
-void xwl_present_commit_buffer_frame(struct xwl_window *xwl_window);
-
-static void
-present_frame_callback(void *data,
-               struct wl_callback *callback,
-               uint32_t time)
-{
-    struct xwl_present_event *event, *tmp;
-    struct xwl_window *xwl_window = data;
-    ErrorF("XX present_frame_callback: %i, %i\n", xwl_window, xwl_window->present_msc);
-
-    wl_callback_destroy(xwl_window->present_frame_callback);
-    xwl_window->present_frame_callback = NULL;
-
-    uint64_t msc = ++xwl_window->present_msc;
-
-    /* Check events */
-    xorg_list_for_each_entry_safe(event, tmp, &xwl_window->present_event_list, list) {
-        if (event->target_msc <= msc) {
-            present_event_notify(event->event_id, 0, msc);
-            xorg_list_del(&event->list);
-            free(event);
-        }
-    }
-
-    if (!xorg_list_is_empty(&xwl_window->present_event_list)) {
-        // dummy commit to receive a callback on next frame
-        xwl_present_commit_buffer_frame(xwl_window);
-    }
-}
-
-static const struct wl_callback_listener present_frame_listener = {
-    present_frame_callback
-};
-
-void
-xwl_present_commit_buffer_frame(struct xwl_window *xwl_window)  //TODOX: move down in this file
-{
-    ErrorF("XX xwl_present_commit_buffer_frame\n");
-
-    PixmapPtr pixmap = xwl_window->current_pixmap;
-
-    struct wl_buffer *buffer = xwl_glamor_pixmap_get_wl_buffer(pixmap);
-    wl_surface_attach(xwl_window->surface, buffer, 0, 0);
-
-    wl_surface_damage(xwl_window->surface, 0, 0, pixmap->drawable.width, pixmap->drawable.height);
-
-    if (!xwl_window->present_frame_callback) {
-        xwl_window->present_frame_callback = wl_surface_frame(xwl_window->surface);
-        wl_callback_add_listener(xwl_window->present_frame_callback, &present_frame_listener, xwl_window);
-    }
-
-//    wl_buffer_add_listener(buffer, &release_listener, event); //TODOX: we need make sure this only happens once per wl_buffer/Pixmap
-    wl_surface_commit(xwl_window->surface);
-
-    wl_display_flush(xwl_window->xwl_screen->display);
-}
-
 static Bool
 xwl_realize_window(WindowPtr window)
 {
@@ -946,6 +888,64 @@ wm_selection_callback(CallbackListPtr *p, void *data, void *arg)
     DeleteCallback(&SelectionCallback, wm_selection_callback, xwl_screen);
 }
 
+void xwl_present_commit_buffer_frame(struct xwl_window *xwl_window);
+
+static void
+present_frame_callback(void *data,
+               struct wl_callback *callback,
+               uint32_t time)
+{
+    struct xwl_present_event *event, *tmp;
+    struct xwl_window *xwl_window = data;
+    ErrorF("XX present_frame_callback: %i, %i\n", xwl_window, xwl_window->present_msc);
+
+    wl_callback_destroy(xwl_window->present_frame_callback);
+    xwl_window->present_frame_callback = NULL;
+
+    uint64_t msc = ++xwl_window->present_msc;
+
+    /* Check events */
+    xorg_list_for_each_entry_safe(event, tmp, &xwl_window->present_event_list, list) {
+        if (event->target_msc <= msc) {
+            present_event_notify(event->event_id, 0, msc);
+            xorg_list_del(&event->list);
+            free(event);
+        }
+    }
+
+    if (!xorg_list_is_empty(&xwl_window->present_event_list)) {
+        /* dummy commit to receive a callback on next frame */
+        xwl_present_commit_buffer_frame(xwl_window);
+    }
+}
+
+static const struct wl_callback_listener present_frame_listener = {
+    present_frame_callback
+};
+
+void
+xwl_present_commit_buffer_frame(struct xwl_window *xwl_window)
+{
+    ErrorF("XX xwl_present_commit_buffer_frame\n");
+
+    PixmapPtr pixmap = xwl_window->current_pixmap;
+
+    struct wl_buffer *buffer = xwl_glamor_pixmap_get_wl_buffer(pixmap);
+    wl_surface_attach(xwl_window->surface, buffer, 0, 0);
+
+    wl_surface_damage(xwl_window->surface, 0, 0, pixmap->drawable.width, pixmap->drawable.height);
+
+    if (!xwl_window->present_frame_callback) {
+        xwl_window->present_frame_callback = wl_surface_frame(xwl_window->surface);
+        wl_callback_add_listener(xwl_window->present_frame_callback, &present_frame_listener, xwl_window);
+    }
+
+//    wl_buffer_add_listener(buffer, &release_listener, event); //TODOX: if we can use it, we need make sure this only happens once per wl_buffer/Pixmap
+    wl_surface_commit(xwl_window->surface);
+
+    wl_display_flush(xwl_window->xwl_screen->display);
+}
+
 static RRCrtcPtr
 xwl_present_get_crtc(WindowPtr window)
 {
@@ -1023,16 +1023,9 @@ xwl_present_abort_vblank(RRCrtcPtr crtc, uint64_t event_id, uint64_t msc)
 static void
 xwl_present_flush(WindowPtr window)
 {
-    // only used on copy  TODOX: not necessary at all because of that?
-
-    ErrorF("YY xwl_present_flush\n");
-
-    // TODOX: responsible for seg faults on window close of VLC - how fix?
-//    struct xwl_window *xwl_window = xwl_window_from_window(window);
-//    wl_display_flush(xwl_window->xwl_screen->display);
+    /* Only called when a Pixmap is copied instead of flipped,
+     * but in this case we wait on the next block_handler. */
 }
-
-
 
 struct pixmap_visit {
     PixmapPtr   old;
@@ -1070,8 +1063,6 @@ xwl_present_set_tree_pixmap(WindowPtr window,
         return;
     TraverseTree(window, xwl_present_set_tree_pixmap_visit, &visit);
 }
-
-
 
 static Bool
 xwl_present_check_flip(RRCrtcPtr crtc,
@@ -1165,8 +1156,6 @@ xwl_present_switch_pixmap(WindowPtr window, PixmapPtr pixmap, uint64_t flip_even
         present_event_notify(flip_event_id, 0, xwl_window->present_msc);
     }
 }
-
-
 
 static present_screen_info_rec xwl_present_screen_info = {
     .version = PRESENT_SCREEN_INFO_VERSION,
