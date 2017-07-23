@@ -59,6 +59,7 @@ struct xwl_screen {
     int listen_fd_count;
     int rootless;
     int glamor;
+    int present;
 
     CreateScreenResourcesProcPtr CreateScreenResources;
     CloseScreenProcPtr CloseScreen;

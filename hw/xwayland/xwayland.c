@@ -500,12 +500,10 @@ xwl_realize_window(WindowPtr window)
         wl_region_destroy(region);
     }
 
-    xwl_window->present_crtc_fake = RRCrtcCreate(xwl_screen->screen, xwl_window);
-    if (!xwl_window->present_crtc_fake) {
-        ErrorF("Failed creating Present CRTC Fake for window.\n");
-        // TODOX: error handling
+    if (xwl_screen->present) {
+        xwl_window->present_crtc_fake = RRCrtcCreate(xwl_screen->screen, xwl_window);
+        xwl_window->present_msc = 1;
     }
-    xwl_window->present_msc = 1;
 
     wl_display_flush(xwl_screen->display);
 
@@ -601,7 +599,8 @@ xwl_unrealize_window(WindowPtr window)
         free(event);
     }
 
-    RRCrtcDestroy(xwl_window->present_crtc_fake);
+    if (xwl_window->present_crtc_fake)
+        RRCrtcDestroy(xwl_window->present_crtc_fake);
 
     free(xwl_window);
     dixSetPrivate(&window->devPrivates, &xwl_window_private_key, NULL);
@@ -1073,12 +1072,8 @@ xwl_present_check_flip(RRCrtcPtr crtc,
     ErrorF("XX xwl_present_check_flip 1: %i, %i, %i\n", crtc, window, pixmap);
     struct xwl_window *xwl_window = crtc->devPrivate;
     struct xwl_screen *xwl_screen = xwl_window->xwl_screen;
-#ifdef GLAMOR_HAS_GBM
-    ErrorF("XX xwl_present_check_flip 2: %i\n", xwl_screen->flipping_window);
-    return TRUE;//!xwl_screen->flipping_window || xwl_screen->flipping_window == window;
-#else
-    return FALSE;
-#endif
+
+    return xwl_window->present_crtc_fake;
 }
 
 static Bool
@@ -1318,10 +1313,8 @@ xwl_screen_init(ScreenPtr pScreen, int argc, char **argv)
     }
 #endif
 
-    if (xwl_screen->glamor) {
-        //TODOX: combine condition with below and msg if error
-        ErrorF("XX xwl_screen_init -> present_init 1\n");
-        Bool ret = xwl_present_init(pScreen);
+    if (xwl_screen->glamor && xwl_screen->rootless) {
+        xwl_screen->present = xwl_present_init(pScreen);
     }
 
     if (!xwl_screen->glamor) {
