@@ -647,17 +647,14 @@ xwl_unrealize_window(WindowPtr window)
     if (xwl_window->frame_callback)
         wl_callback_destroy(xwl_window->frame_callback);
 
-    if (xwl_screen->flipping_window == window)
-        xwl_present_unflip(screen, 0);
+    if (xwl_screen->flipping_window && xwl_window_from_window(xwl_screen->flipping_window) == xwl_window)
+        xwl_screen->flipping_window = NULL;
 
-    if (xwl_window->present_frame_callback) {
+    if (xwl_window->present_frame_callback)
         wl_callback_destroy(xwl_window->present_frame_callback);
-        xwl_window->present_frame_callback = NULL;
-    }
 
     /* Clean up remaining events */
     xorg_list_for_each_entry_safe(event, tmp, &xwl_window->present_event_list, list) {
-        present_event_notify(event->event_id, 0, xwl_window->present_msc);
         xorg_list_del(&event->list);
         free(event);
     }
@@ -695,7 +692,6 @@ static const struct wl_callback_listener frame_listener = {
 static void
 buffer_release(void *data, struct wl_buffer *buffer)
 {
-    ErrorF("XX buffer_release\n");
     struct xwl_present_event *event = data;
 
     //TODOX: how to translate this in Present extension?
@@ -1108,31 +1104,7 @@ xwl_present_flip(RRCrtcPtr crtc,
     WindowPtr           window = xwl_window->window;
     ScreenPtr           screen = xwl_screen->screen;
 
-    /* check again for delayed flips */
-    if (!xwl_present_check_flip(crtc, window, pixmap, sync_flip)) {
-        ErrorF("SSXX xwl_present_flip ERROR\n");
-        return FALSE;
-    }
-
-    /* if we come from another window, unflip it,
-     * also store the restore pixmap for 'window' */
-    if (xwl_screen->flipping_window != window) {
-        xwl_present_unflip(screen, 0);
-
-        xwl_window->present_restore_pixmap = (*screen->GetWindowPixmap)(window);
-    }
-
-    (*screen->SetWindowPixmap)(window, pixmap);
-//    xwl_present_set_tree_pixmap(window, NULL, pixmap);
-
-    xwl_screen->flipping_window = window;
     xwl_window->cur_pixmap = pixmap;
-
-    xwl_present_commit_buffer_frame(xwl_window);
-
-    /* although probably not yet painted on the screen,
-     * all our flips apply immediately respective to the Wayland compositor */
-    present_event_notify(event_id, 0, xwl_window->present_msc);
 
     return TRUE;
 }
@@ -1146,22 +1118,55 @@ xwl_present_unflip(ScreenPtr screen, uint64_t event_id)
     ErrorF("XX xwl_present_unflip\n");
 
     struct xwl_screen *xwl_screen = xwl_screen_get(screen);
-    WindowPtr flipping_window = xwl_screen->flipping_window;
-    struct xwl_window *xwl_flipping_window;
-
-    if (!flipping_window)
-        return;
-
-    xwl_flipping_window = xwl_window_get(flipping_window);
-
-    (*screen->SetWindowPixmap)(flipping_window, xwl_flipping_window->present_restore_pixmap);
-//    xwl_present_set_tree_pixmap(flipping_window, NULL, xwl_flipping_window->present_restore_pixmap);
-    xwl_flipping_window->present_restore_pixmap = NULL;
 
     xwl_screen->flipping_window = NULL;
-
-    ErrorF("XX xwl_present_unflip END\n");
+    present_event_notify(event_id, 0, 0);
 }
+
+/*
+ * Xwayland specific Pixmap switcher
+ */
+static void
+xwl_present_switch_pixmap(WindowPtr window, PixmapPtr pixmap, uint64_t flip_event_id)
+{
+    if (!window)
+        return;
+
+    struct xwl_window   *xwl_window = xwl_window_from_window(window);
+    if (!xwl_window)
+        return;
+
+    struct xwl_screen   *xwl_screen = xwl_window->xwl_screen;
+    ScreenPtr           screen = xwl_screen->screen;
+    WindowPtr           flipping_window = xwl_screen->flipping_window;
+    struct xwl_window   *xwl_flipping_window = xwl_window_from_window(flipping_window);
+
+    if (flipping_window == window){
+        if (!flip_event_id) {
+            /* restoring requested */
+//            xwl_present_set_tree_pixmap(window, pixmap, xwl_flipping_window->present_restore_pixmap);
+            (*screen->SetWindowPixmap)(window, xwl_window->present_restore_pixmap);
+            xwl_screen->flipping_window = NULL;
+        }
+    } else {
+        if (flipping_window) {
+            /* we come from another window, restore it */
+//            xwl_present_set_tree_pixmap(flipping_window, xwl_flipping_window->cur_pixmap, xwl_flipping_window->present_restore_pixmap);
+            (*screen->SetWindowPixmap)(flipping_window, xwl_flipping_window->present_restore_pixmap);
+        }
+        xwl_window->present_restore_pixmap = (*screen->GetWindowPixmap)(window);
+//        xwl_present_set_tree_pixmap(window, NULL, pixmap);
+        (*screen->SetWindowPixmap)(window, pixmap);
+        xwl_screen->flipping_window = window;
+    }
+
+    if (flip_event_id) {
+        xwl_present_commit_buffer_frame(xwl_window);
+        present_event_notify(flip_event_id, 0, xwl_window->present_msc);
+    }
+}
+
+
 
 static present_screen_info_rec xwl_present_screen_info = {
     .version = PRESENT_SCREEN_INFO_VERSION,
@@ -1170,10 +1175,11 @@ static present_screen_info_rec xwl_present_screen_info = {
     .queue_vblank = xwl_present_queue_vblank,
     .abort_vblank = xwl_present_abort_vblank,
     .flush = xwl_present_flush,
-    .capabilities = PresentCapabilityAsync | XwaylandCapability,
+    .capabilities = PresentCapabilityAsync,
     .check_flip = xwl_present_check_flip,
     .flip = xwl_present_flip,
     .unflip = xwl_present_unflip,
+    .switch_pixmap = xwl_present_switch_pixmap
 };
 
 Bool

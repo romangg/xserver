@@ -131,10 +131,6 @@ present_check_flip(RRCrtcPtr    crtc,
     WindowPtr                   root = screen->root;
     present_screen_priv_ptr     screen_priv = present_screen_priv(screen);
 
-    ErrorF("PP present_check_flip 1: %i, %i, %i, %i |\n", crtc, window, root->winSize, &window->clipList);
-
-    ErrorF("PP present_check_flip 1.1: %i, %i, %i, %i\n", window->drawable.x, window->drawable.y, window->drawable.width, window->drawable.height);
-    ErrorF("PP present_check_flip 1.2: %i, %i, %i, %i\n", screen->x, screen->y, screen->width, screen->height);
     if (!screen_priv)
         return FALSE;
 
@@ -380,7 +376,7 @@ present_flip_idle(ScreenPtr screen)
 {
     present_screen_priv_ptr screen_priv = present_screen_priv(screen);
 
-    if (screen_priv->flip_window && screen_priv->flip_pixmap) { //TODOX: why do we need to test on flip_window in Xwayland?
+    if (screen_priv->flip_pixmap) {
         present_pixmap_idle(screen_priv->flip_pixmap, screen_priv->flip_window,
                             screen_priv->flip_serial, screen_priv->flip_idle_fence);
         if (screen_priv->flip_idle_fence)
@@ -442,10 +438,6 @@ present_restore_screen_pixmap(ScreenPtr screen)
     WindowPtr flip_window;
     ErrorF("PP present_restore_screen_pixmap\n");
 
-    /* on Xwayland don't try to restore, we do this in the DDX itself */
-    if (screen_priv->info->capabilities & XwaylandCapability)
-        return;
-
     if (screen_priv->flip_pending) {
         flip_window = screen_priv->flip_pending->window;
         flip_pixmap = screen_priv->flip_pending->pixmap;
@@ -455,6 +447,12 @@ present_restore_screen_pixmap(ScreenPtr screen)
     }
 
     assert (flip_pixmap);
+
+    if (screen_priv->info->switch_pixmap) {
+        /* Let the DDX do the restoring if it wants to. */
+        (*screen_priv->info->switch_pixmap) (flip_window, flip_pixmap, 0);
+        return;
+    }
 
     /* Update the screen pixmap with the current flip pixmap contents
      * Only do this the first time for a particular unflip operation, or
@@ -714,26 +712,22 @@ present_execute(present_vblank_ptr vblank, uint64_t ust, uint64_t crtc_msc)
             if (present_flip(vblank->crtc, vblank->event_id, vblank->target_msc, vblank->pixmap, vblank->sync_flip)) {
                 RegionPtr damage;
 
-//#if 0   //TODOX
-
-
-                /* on Xwayland we do this in the DDX */
-                if (!(screen_priv->info->capabilities & XwaylandCapability)) {
-
-                /* Fix window pixmaps:
-                 *  1) Restore previous flip window pixmap
-                 *  2) Set current flip window pixmap to the new pixmap
-                 */
-                    ErrorF("PP present_execute NO XWAYLAND: %i, %i\n", screen_priv->flip_window, screen_priv->flip_pixmap);
-                if (screen_priv->flip_window && screen_priv->flip_window != window)
-                    present_set_tree_pixmap(screen_priv->flip_window,
-                                            screen_priv->flip_pixmap,
-                                            (*screen->GetScreenPixmap)(screen));
-                present_set_tree_pixmap(vblank->window, NULL, vblank->pixmap);
-                present_set_tree_pixmap(screen->root, NULL, vblank->pixmap);
-
+                if (screen_priv->info->switch_pixmap) {
+                    /* If the DDX wants to, let it set the Pixmaps. */
+                    (*screen_priv->info->switch_pixmap) (vblank->window, vblank->pixmap, vblank->event_id);
+                } else {
+                    /* Fix window pixmaps:
+                     *  1) Restore previous flip window pixmap
+                     *  2) Set current flip window pixmap to the new pixmap
+                     */
+                    if (screen_priv->flip_window && screen_priv->flip_window != window)
+                        present_set_tree_pixmap(screen_priv->flip_window,
+                                                screen_priv->flip_pixmap,
+                                                (*screen->GetScreenPixmap)(screen));
+                    present_set_tree_pixmap(vblank->window, NULL, vblank->pixmap);
+                    present_set_tree_pixmap(screen->root, NULL, vblank->pixmap);
                 }
-//#endif
+
                 /* Report update region as damaged
                  */
                 if (vblank->update) {

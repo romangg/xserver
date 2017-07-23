@@ -83,8 +83,11 @@ typedef Bool (*present_flip_ptr) (RRCrtcPtr crtc,
 typedef void (*present_unflip_ptr) (ScreenPtr screen,
                                     uint64_t event_id);
 
+/* Switch Pixmaps in DDX instead of using the internal mechanism
+ */
+typedef Bool (*present_switch_pixmap_ptr) (WindowPtr window, PixmapPtr pixmap, uint64_t flip_event_id);
+
 #define PRESENT_SCREEN_INFO_VERSION        0
-#define XwaylandCapability                 99
 
 typedef struct present_screen_info {
     uint32_t                            version;
@@ -98,6 +101,8 @@ typedef struct present_screen_info {
     present_check_flip_ptr              check_flip;
     present_flip_ptr                    flip;
     present_unflip_ptr                  unflip;
+
+    present_switch_pixmap_ptr           switch_pixmap;
 
 } present_screen_info_rec, *present_screen_info_ptr;
 
