@@ -91,10 +91,6 @@ present_clear_window_flip(WindowPtr window)
     present_screen_priv_ptr     screen_priv = present_screen_priv(screen);
     present_vblank_ptr          flip_pending = screen_priv->flip_pending;
 
-    if (flip_pending)   //TODOX
-        ErrorF("PP present_clear_window_flip: %i, %i, %i\n", window, screen_priv->flip_window, flip_pending->window);
-    else
-        ErrorF("PP present_clear_window_flip: %i, %i\n", window, screen_priv->flip_window);
     if (flip_pending && flip_pending->window == window) {
         present_set_abort_flip(screen);
         flip_pending->window = NULL;

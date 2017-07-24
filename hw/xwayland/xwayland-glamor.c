@@ -157,7 +157,6 @@ xwl_glamor_pixmap_get_wl_buffer(PixmapPtr pixmap)
 {
     struct xwl_screen *xwl_screen = xwl_screen_get(pixmap->drawable.pScreen);
     struct xwl_pixmap *xwl_pixmap = xwl_pixmap_get(pixmap);
-    ErrorF("XX xwl_glamor_pixmap_get_wl_buffer 1, %i, %i, %i\n", xwl_pixmap, xwl_pixmap->bo, xwl_pixmap->buffer);
     int prime_fd;
 
     if (xwl_pixmap->buffer)
