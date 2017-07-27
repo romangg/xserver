@@ -178,31 +178,10 @@ present_check_flip(RRCrtcPtr    crtc,
             return FALSE;
         #endif
     }
-    ErrorF("PP present_check_flip TEST: Window: (%i, %i) %ix%i Pixmap: (%i, %i) %ix%i\n", window->drawable.x, window->drawable.y, window->drawable.width, window->drawable.height,
-                                        pixmap->screen_x, pixmap->screen_y,pixmap->drawable.width, pixmap->drawable.height);
 
     if (window->drawable.width != pixmap->drawable.width ||
             window->drawable.height != pixmap->drawable.height)
         return FALSE;
-
-    /*
-     * TODO: We currently still need all these tests for Rootless as well,
-     * because otherwise there are multiple points of failure when painting the Screen/Window
-     * => Flips for other than fullscreen windows still breaks the painting
-     *
-     */
-
-    /* Does the window match the pixmap exactly? */
-    if (window->drawable.x != 0 || window->drawable.y != 0 ||
-#ifdef COMPOSITE
-        window->drawable.x != pixmap->screen_x || window->drawable.y != pixmap->screen_y ||
-#endif
-        window->drawable.width != pixmap->drawable.width ||
-        window->drawable.height != pixmap->drawable.height) {
-        return FALSE;
-    }
-    /* */
-    /* */
 
     /* Ask the driver for permission */
     if (screen_priv->info->check_flip) {
@@ -211,7 +190,6 @@ present_check_flip(RRCrtcPtr    crtc,
             return FALSE;
         }
     }
-    ErrorF("PP present_check_flip SUCCESS: %i, %i\n", crtc, window);
 
     return TRUE;
 }
@@ -524,15 +502,15 @@ present_restore_window_pixmap_only(WindowPtr window)
     /* Update the screen pixmap with the current flip pixmap contents
      * Only do this the first time for a particular unflip operation
      *
-     * TODO: maybe the condition isn't necessary.
      */
-//    if (screen->GetWindowPixmap(window) == flip_pixmap)
-//        present_copy_region(&window_priv->restore_pixmap->drawable, flip_pixmap, NULL, 0, 0); // TODOX: window_priv->restore_pixmap->drawable is (sometimes?) NULL
+    if (screen->GetWindowPixmap(window) == flip_pixmap)
+        present_copy_region(&window_priv->restore_pixmap->drawable, flip_pixmap, NULL, 0, 0);
 
     /* Switch back to using the original window pixmap now to avoid
      * 2D applications drawing to the wrong pixmap.
      */
     present_set_tree_pixmap(window, flip_pixmap, window_priv->restore_pixmap);
+    window_priv->restore_pixmap->refcnt--;
     window_priv->restore_pixmap = NULL;
 }
 
@@ -891,8 +869,10 @@ present_execute(present_vblank_ptr vblank, uint64_t ust, uint64_t crtc_msc)
                      *  1) Remember original window pixmap
                      *  2) Set current flip window pixmap to the new pixmap
                      */
-                    if (!window_priv->restore_pixmap)
+                    if (!window_priv->restore_pixmap) {
                         window_priv->restore_pixmap = (*screen->GetWindowPixmap)(window);
+                        window_priv->restore_pixmap->refcnt++;
+                    }
                     present_set_tree_pixmap(vblank->window, NULL, vblank->pixmap);
 
                 } else {
