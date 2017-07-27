@@ -149,14 +149,10 @@ present_check_flip(RRCrtcPtr    crtc,
         return FALSE;
     }
 
-    /* We replace these tests in Xwayland, because:
-     * - in rootless mode there is no associated winSize
-     * - we can ignore the Composite extension */
-    if (screen_priv->info->capabilities & XwaylandCapability) {
-        if (window->drawable.x != screen->x || window->drawable.y != screen->y ||
-                       window->drawable.width != screen->width || window->drawable.height != screen->height)
-                return FALSE;
-    } else {
+    /* In Rootless mode we do individual flips and have one CRTC per window
+     * Therefore these checks are not needed.
+     */
+    if (!present_check_rootless(screen)) {
         /* Make sure the window hasn't been redirected with Composite */
         window_pixmap = screen->GetWindowPixmap(window);
         if (window_pixmap != screen->GetScreenPixmap(screen) &&
@@ -173,7 +169,28 @@ present_check_flip(RRCrtcPtr    crtc,
         if (valid && !RegionEqual(valid, &root->winSize)) {
             return FALSE;
         }
+
+        /* Does the window match the pixmap exactly? */
+        if (window->drawable.x != 0 || window->drawable.y != 0)
+            return FALSE;
+        #ifdef COMPOSITE
+        if (window->drawable.x != pixmap->screen_x || window->drawable.y != pixmap->screen_y)
+            return FALSE;
+        #endif
     }
+    ErrorF("PP present_check_flip TEST: Window: (%i, %i) %ix%i Pixmap: (%i, %i) %ix%i\n", window->drawable.x, window->drawable.y, window->drawable.width, window->drawable.height,
+                                        pixmap->screen_x, pixmap->screen_y,pixmap->drawable.width, pixmap->drawable.height);
+
+    if (window->drawable.width != pixmap->drawable.width ||
+            window->drawable.height != pixmap->drawable.height)
+        return FALSE;
+
+    /*
+     * TODO: We currently still need all these tests for Rootless as well,
+     * because otherwise there are multiple points of failure when painting the Screen/Window
+     * => Flips for other than fullscreen windows still breaks the painting
+     *
+     */
 
     /* Does the window match the pixmap exactly? */
     if (window->drawable.x != 0 || window->drawable.y != 0 ||
@@ -184,6 +201,8 @@ present_check_flip(RRCrtcPtr    crtc,
         window->drawable.height != pixmap->drawable.height) {
         return FALSE;
     }
+    /* */
+    /* */
 
     /* Ask the driver for permission */
     if (screen_priv->info->check_flip) {
@@ -192,6 +211,7 @@ present_check_flip(RRCrtcPtr    crtc,
             return FALSE;
         }
     }
+    ErrorF("PP present_check_flip SUCCESS: %i, %i\n", crtc, window);
 
     return TRUE;
 }
@@ -369,6 +389,19 @@ present_flip_try_ready(ScreenPtr screen)
 }
 
 static void
+present_flip_try_ready_rootless(WindowPtr window)
+{
+    present_vblank_ptr  vblank;
+
+    xorg_list_for_each_entry(vblank, &present_flip_queue, event_queue) {
+        if (vblank->queued && vblank->window == window) {
+            present_re_execute(vblank);
+            return;
+        }
+    }
+}
+
+static void
 present_flip_idle(ScreenPtr screen)
 {
     present_screen_priv_ptr screen_priv = present_screen_priv(screen);
@@ -385,6 +418,25 @@ present_flip_idle(ScreenPtr screen)
         screen_priv->flip_serial = 0;
         screen_priv->flip_pixmap = NULL;
         screen_priv->flip_idle_fence = NULL;
+    }
+}
+
+static void
+present_flip_idle_rootless(WindowPtr window)
+{
+    present_window_priv_ptr window_priv = present_window_priv(window);
+
+    if (window_priv->flip_pixmap) {
+        present_pixmap_idle(window_priv->flip_pixmap, window,
+                            window_priv->flip_serial, window_priv->flip_idle_fence);
+        if (window_priv->flip_idle_fence)
+            present_fence_destroy(window_priv->flip_idle_fence);
+
+        dixDestroyPixmap(window_priv->flip_pixmap, window_priv->flip_pixmap->drawable.id);
+        window_priv->flip_crtc = NULL;
+        window_priv->flip_serial = 0;
+        window_priv->flip_pixmap = NULL;
+        window_priv->flip_idle_fence = NULL;
     }
 }
 
@@ -441,13 +493,6 @@ present_restore_screen_pixmap(ScreenPtr screen)
 
     assert (flip_pixmap);
 
-    if (screen_priv->info->switch_pixmap) {
-        /* Let the DDX do the restoring if it wants to. */
-        if (flip_window)
-            (*screen_priv->info->switch_pixmap) (flip_window, flip_pixmap, 0);
-        return;
-    }
-
     /* Update the screen pixmap with the current flip pixmap contents
      * Only do this the first time for a particular unflip operation, or
      * we'll probably scribble over other windows
@@ -465,6 +510,33 @@ present_restore_screen_pixmap(ScreenPtr screen)
 }
 
 void
+present_restore_window_pixmap_only(WindowPtr window)
+{
+    ScreenPtr                   screen = window->drawable.pScreen;
+    present_window_priv_ptr     window_priv = present_window_priv(window);
+    PixmapPtr                   flip_pixmap = window_priv->flip_pending ? window_priv->flip_pending->pixmap : window_priv->flip_pixmap;
+
+    assert (flip_pixmap);
+
+    if (!window_priv->restore_pixmap)
+        return;
+
+    /* Update the screen pixmap with the current flip pixmap contents
+     * Only do this the first time for a particular unflip operation
+     *
+     * TODO: maybe the condition isn't necessary.
+     */
+//    if (screen->GetWindowPixmap(window) == flip_pixmap)
+//        present_copy_region(&window_priv->restore_pixmap->drawable, flip_pixmap, NULL, 0, 0); // TODOX: window_priv->restore_pixmap->drawable is (sometimes?) NULL
+
+    /* Switch back to using the original window pixmap now to avoid
+     * 2D applications drawing to the wrong pixmap.
+     */
+    present_set_tree_pixmap(window, flip_pixmap, window_priv->restore_pixmap);
+    window_priv->restore_pixmap = NULL;
+}
+
+void
 present_set_abort_flip(ScreenPtr screen)
 {
     present_screen_priv_ptr screen_priv = present_screen_priv(screen);
@@ -472,6 +544,17 @@ present_set_abort_flip(ScreenPtr screen)
     if (!screen_priv->flip_pending->abort_flip) {
         present_restore_screen_pixmap(screen);
         screen_priv->flip_pending->abort_flip = TRUE;
+    }
+}
+
+void
+present_set_abort_flip_rootless(WindowPtr window)
+{
+    present_window_priv_ptr window_priv = present_window_priv(window);
+
+    if (!window_priv->flip_pending->abort_flip) {
+        present_restore_window_pixmap_only(window);
+        window_priv->flip_pending->abort_flip = TRUE;
     }
 }
 
@@ -491,42 +574,91 @@ present_unflip(ScreenPtr screen)
 }
 
 static void
+present_unflip_rootless(WindowPtr window)
+{
+    present_window_priv_ptr window_priv = present_window_priv(window);
+    present_screen_priv_ptr screen_priv = present_screen_priv(window->drawable.pScreen);
+
+    assert (!window_priv->unflip_event_id);
+    assert (!window_priv->flip_pending);
+
+    present_restore_window_pixmap_only(window);
+
+    window_priv->unflip_event_id = ++present_event_id;
+    DebugPresent(("u %lld\n", window_priv->unflip_event_id));
+    (*screen_priv->info->unflip_rootless) (window, window_priv->unflip_event_id);
+}
+
+static void
 present_flip_notify(present_vblank_ptr vblank, uint64_t ust, uint64_t crtc_msc)
 {
     ScreenPtr                   screen = vblank->screen;
+    WindowPtr                   window = vblank->window;
     present_screen_priv_ptr     screen_priv = present_screen_priv(screen);
+    present_window_priv_ptr     window_priv = present_window_priv(window);
 
     DebugPresent(("\tn %lld %p %8lld: %08lx -> %08lx\n",
                   vblank->event_id, vblank, vblank->target_msc,
                   vblank->pixmap ? vblank->pixmap->drawable.id : 0,
                   vblank->window ? vblank->window->drawable.id : 0));
 
-    assert (vblank == screen_priv->flip_pending);
+    if (present_check_rootless(screen)) {
+        assert (vblank == window_priv->flip_pending);
 
-    present_flip_idle(screen);
+        present_flip_idle_rootless(window);
 
-    xorg_list_del(&vblank->event_queue);
+        xorg_list_del(&vblank->event_queue);
 
-    /* Transfer reference for pixmap and fence from vblank to screen_priv */
-    screen_priv->flip_crtc = vblank->crtc;
-    screen_priv->flip_window = vblank->window;
-    screen_priv->flip_serial = vblank->serial;
-    screen_priv->flip_pixmap = vblank->pixmap;
-    screen_priv->flip_sync = vblank->sync_flip;
-    screen_priv->flip_idle_fence = vblank->idle_fence;
+        /* Transfer reference for pixmap and fence from vblank to window_priv */
+        window_priv->flip_crtc = vblank->crtc;
+        window_priv->flip_serial = vblank->serial;
+        window_priv->flip_pixmap = vblank->pixmap;
+        window_priv->flip_sync = vblank->sync_flip;
+        window_priv->flip_idle_fence = vblank->idle_fence;
 
-    vblank->pixmap = NULL;
-    vblank->idle_fence = NULL;
+        vblank->pixmap = NULL;
+        vblank->idle_fence = NULL;
 
-    screen_priv->flip_pending = NULL;
+        window_priv->flip_pending = NULL;
 
-    if (vblank->abort_flip)
-        present_unflip(screen);
+        if (vblank->abort_flip)
+            present_unflip_rootless(window);
 
-    present_vblank_notify(vblank, PresentCompleteKindPixmap, PresentCompleteModeFlip, ust, crtc_msc);
-    present_vblank_destroy(vblank);
+        present_vblank_notify(vblank, PresentCompleteKindPixmap, PresentCompleteModeFlip, ust, crtc_msc);
+        present_vblank_destroy(vblank);
 
-    present_flip_try_ready(screen);
+        present_flip_try_ready_rootless(window);
+
+    } else {
+        assert (vblank == screen_priv->flip_pending);
+
+        present_flip_idle(screen);
+
+        xorg_list_del(&vblank->event_queue);
+
+        /* Transfer reference for pixmap and fence from vblank to screen_priv */
+        screen_priv->flip_crtc = vblank->crtc;
+        screen_priv->flip_window = vblank->window;
+        screen_priv->flip_serial = vblank->serial;
+        screen_priv->flip_pixmap = vblank->pixmap;
+        screen_priv->flip_sync = vblank->sync_flip;
+        screen_priv->flip_idle_fence = vblank->idle_fence;
+
+        vblank->pixmap = NULL;
+        vblank->idle_fence = NULL;
+
+        screen_priv->flip_pending = NULL;
+
+        if (vblank->abort_flip)
+            present_unflip(screen);
+
+        present_vblank_notify(vblank, PresentCompleteKindPixmap, PresentCompleteModeFlip, ust, crtc_msc);
+        present_vblank_destroy(vblank);
+
+        present_flip_try_ready(screen);
+
+    }
+
 }
 
 void
@@ -539,20 +671,19 @@ present_event_notify(uint64_t event_id, uint64_t ust, uint64_t msc)
         return;
     DebugPresent(("\te %lld ust %lld msc %lld\n", event_id, ust, msc));
     xorg_list_for_each_entry(vblank, &present_exec_queue, event_queue) {
-        int64_t match = event_id - vblank->event_id;
-        if (match == 0) {
+        if (event_id == vblank->event_id) {
             present_execute(vblank, ust, msc);
             return;
         }
-        if (match < 0)
-            break;
     }
     xorg_list_for_each_entry(vblank, &present_flip_queue, event_queue) {
         if (vblank->event_id == event_id) {
-            if (vblank->queued)
+            if (vblank->queued) {
                 present_execute(vblank, ust, msc);
-            else
+            } else {
+                assert(vblank->window);
                 present_flip_notify(vblank, ust, msc);
+            }
             return;
         }
     }
@@ -561,12 +692,27 @@ present_event_notify(uint64_t event_id, uint64_t ust, uint64_t msc)
         ScreenPtr               screen = screenInfo.screens[s];
         present_screen_priv_ptr screen_priv = present_screen_priv(screen);
 
-        if (event_id == screen_priv->unflip_event_id) {
-            DebugPresent(("\tun %lld\n", event_id));
-            screen_priv->unflip_event_id = 0;
-            present_flip_idle(screen);
-            present_flip_try_ready(screen);
-            return;
+        if (present_check_rootless(screen)) {
+            present_window_priv_ptr window_priv;
+
+            xorg_list_for_each_entry(window_priv, &screen_priv->windows, screen_list) {
+                if (event_id == window_priv->unflip_event_id) {
+                    DebugPresent(("\tun %lld\n", event_id));
+                    window_priv->unflip_event_id = 0;
+                    present_flip_idle_rootless(window_priv->window);
+                    present_flip_try_ready_rootless(window_priv->window);
+                    return;
+                }
+            }
+
+        } else {
+            if (event_id == screen_priv->unflip_event_id) {
+                DebugPresent(("\tun %lld\n", event_id));
+                screen_priv->unflip_event_id = 0;
+                present_flip_idle(screen);
+                present_flip_try_ready(screen);
+                return;
+            }
         }
     }
 }
@@ -581,7 +727,7 @@ present_check_flip_window (WindowPtr window)
     ScreenPtr                   screen = window->drawable.pScreen;
     present_screen_priv_ptr     screen_priv = present_screen_priv(screen);
     present_window_priv_ptr     window_priv = present_window_priv(window);
-    present_vblank_ptr          flip_pending = screen_priv->flip_pending;
+    present_vblank_ptr          flip_pending;
     present_vblank_ptr          vblank;
 
     /* If this window hasn't ever been used with Present, it can't be
@@ -590,25 +736,43 @@ present_check_flip_window (WindowPtr window)
     if (!window_priv)
         return;
 
-    if (screen_priv->unflip_event_id)
-        return;
+    if (present_check_rootless(screen)) {
+        if (window_priv->unflip_event_id)
+            return;
 
-    if (flip_pending) {
-        /*
-         * Check pending flip
-         */
-        if (flip_pending->window == window) {
+        flip_pending = window_priv->flip_pending;
+
+        if (flip_pending) {
             if (!present_check_flip(flip_pending->crtc, window, flip_pending->pixmap,
                                     flip_pending->sync_flip, NULL, 0, 0))
-                present_set_abort_flip(screen);
+                present_set_abort_flip_rootless(window);
+        } else if (window_priv->flip_pixmap) {
+            if (!present_check_flip(window_priv->flip_crtc, window, window_priv->flip_pixmap, window_priv->flip_sync, NULL, 0, 0))
+                present_unflip_rootless(window);
         }
     } else {
-        /*
-         * Check current flip
-         */
-        if (window == screen_priv->flip_window) {
-            if (!present_check_flip(screen_priv->flip_crtc, window, screen_priv->flip_pixmap, screen_priv->flip_sync, NULL, 0, 0))
-                present_unflip(screen);
+        if (screen_priv->unflip_event_id)
+            return;
+
+        flip_pending = screen_priv->flip_pending;
+
+        if (flip_pending) {
+            /*
+             * Check pending flip
+             */
+            if (flip_pending->window == window) {
+                if (!present_check_flip(flip_pending->crtc, window, flip_pending->pixmap,
+                                        flip_pending->sync_flip, NULL, 0, 0))
+                    present_set_abort_flip(screen);
+            }
+        } else {
+            /*
+             * Check current flip
+             */
+            if (window == screen_priv->flip_window) {
+                if (!present_check_flip(screen_priv->flip_crtc, window, screen_priv->flip_pixmap, screen_priv->flip_sync, NULL, 0, 0))
+                    present_unflip(screen);
+            }
         }
     }
 
@@ -649,7 +813,9 @@ present_execute(present_vblank_ptr vblank, uint64_t ust, uint64_t crtc_msc)
 {
     WindowPtr                   window = vblank->window;
     ScreenPtr                   screen = window->drawable.pScreen;
+    present_window_priv_ptr     window_priv = present_window_priv(window);
     present_screen_priv_ptr     screen_priv = present_screen_priv(screen);
+    Bool                        rootless = present_check_rootless(screen);
     uint8_t                     mode;
 
     if (vblank->requeue) {
@@ -670,10 +836,23 @@ present_execute(present_vblank_ptr vblank, uint64_t ust, uint64_t crtc_msc)
     }
 
     if (vblank->flip && vblank->pixmap && vblank->window) {
-        if (screen_priv->flip_pending || screen_priv->unflip_event_id) {
-            DebugPresent(("\tr %lld %p (pending %p unflip %lld)\n",
-                          vblank->event_id, vblank,
-                          screen_priv->flip_pending, screen_priv->unflip_event_id));
+        Bool needs_waiting = FALSE;
+        if (rootless) {
+            if (window_priv->flip_pending || window_priv->unflip_event_id) {
+                DebugPresent(("\tr %lld %p (pending %p unflip %lld)\n",
+                              vblank->event_id, vblank,
+                              window_priv->flip_pending, window_priv->unflip_event_id));
+                needs_waiting = TRUE;
+            }
+        } else {
+            if (screen_priv->flip_pending || screen_priv->unflip_event_id) {
+                DebugPresent(("\tr %lld %p (pending %p unflip %lld)\n",
+                              vblank->event_id, vblank,
+                              screen_priv->flip_pending, screen_priv->unflip_event_id));
+                needs_waiting = TRUE;
+            }
+        }
+        if (needs_waiting) {
             xorg_list_del(&vblank->event_queue);
             xorg_list_append(&vblank->event_queue, &present_flip_queue);
             vblank->flip_ready = TRUE;
@@ -696,7 +875,10 @@ present_execute(present_vblank_ptr vblank, uint64_t ust, uint64_t crtc_msc)
             /* Prepare to flip by placing it in the flip queue and
              * and sticking it into the flip_pending field
              */
-            screen_priv->flip_pending = vblank;
+            if (rootless)
+                window_priv->flip_pending = vblank;
+            else
+                screen_priv->flip_pending = vblank;
 
             xorg_list_add(&vblank->event_queue, &present_flip_queue);
             /* Try to flip
@@ -704,9 +886,15 @@ present_execute(present_vblank_ptr vblank, uint64_t ust, uint64_t crtc_msc)
             if (present_flip(vblank->crtc, vblank->event_id, vblank->target_msc, vblank->pixmap, vblank->sync_flip)) {
                 RegionPtr damage;
 
-                if (screen_priv->info->switch_pixmap) {
-                    /* If the DDX wants to, let it set the Pixmaps. */
-                    (*screen_priv->info->switch_pixmap) (vblank->window, vblank->pixmap, vblank->event_id);
+                if (rootless) {
+                    /* Fix window pixmaps:
+                     *  1) Remember original window pixmap
+                     *  2) Set current flip window pixmap to the new pixmap
+                     */
+                    if (!window_priv->restore_pixmap)
+                        window_priv->restore_pixmap = (*screen->GetWindowPixmap)(window);
+                    present_set_tree_pixmap(vblank->window, NULL, vblank->pixmap);
+
                 } else {
                     /* Fix window pixmaps:
                      *  1) Restore previous flip window pixmap
@@ -729,28 +917,43 @@ present_execute(present_vblank_ptr vblank, uint64_t ust, uint64_t crtc_msc)
                     damage = &window->clipList;
 
                 DamageDamageRegion(&vblank->window->drawable, damage);
+                if (*screen_priv->info->flip_executed)
+                    (*screen_priv->info->flip_executed) (vblank->crtc, vblank->event_id);
+
                 return;
             }
 
             xorg_list_del(&vblank->event_queue);
             /* Oops, flip failed. Clear the flip_pending field
               */
-            screen_priv->flip_pending = NULL;
+            if (rootless)
+                window_priv->flip_pending = NULL;
+            else
+                screen_priv->flip_pending = NULL;
+
             vblank->flip = FALSE;
         }
         DebugPresent(("\tc %p %8lld: %08lx -> %08lx\n", vblank, crtc_msc, vblank->pixmap->drawable.id, vblank->window->drawable.id));
-        if (screen_priv->flip_pending) {
 
-            /* Check pending flip
-             */
-            if (window == screen_priv->flip_pending->window)
-                present_set_abort_flip(screen);
-        } else if (!screen_priv->unflip_event_id) {
+        if (rootless) {
+            if (window_priv->flip_pending) {
+                present_set_abort_flip_rootless(window);
+            } else if (!window_priv->unflip_event_id && window_priv->flip_pixmap) {
+                present_unflip_rootless(window);
+            }
+        } else {
+            if (screen_priv->flip_pending) {
+                /* Check pending flip
+                 */
+                if (window == screen_priv->flip_pending->window)
+                    present_set_abort_flip(screen);
+            } else if (!screen_priv->unflip_event_id) {
 
-            /* Check current flip
-             */
-            if (window == screen_priv->flip_window)
-                present_unflip(screen);
+                /* Check current flip
+                 */
+                if (window == screen_priv->flip_window)
+                    present_unflip(screen);
+            }
         }
 
         /* If present_flip failed, we may have to requeue for the target MSC */
@@ -1044,16 +1247,29 @@ present_notify_msc(WindowPtr window,
 }
 
 void
-present_flip_destroy(ScreenPtr screen)
+present_flips_destroy(ScreenPtr screen)
 {
     present_screen_priv_ptr     screen_priv = present_screen_priv(screen);
 
-    /* Reset window pixmaps back to the screen pixmap */
-    if (screen_priv->flip_pending)
-        present_set_abort_flip(screen);
+    if (present_check_rootless(screen)) {
+        present_window_priv_ptr window_priv;
 
-    /* Drop reference to any pending flip or unflip pixmaps. */
-    present_flip_idle(screen);
+        xorg_list_for_each_entry(window_priv, &screen_priv->windows, screen_list) {
+            /* Reset window pixmaps back to the original window pixmap */
+            if (window_priv->flip_pending)
+                present_set_abort_flip_rootless(window_priv->window);
+
+            /* Drop reference to any pending flip or unflip pixmaps. */
+            present_flip_idle_rootless(window_priv->window);
+        }
+    } else {
+        /* Reset window pixmaps back to the screen pixmap */
+        if (screen_priv->flip_pending)
+            present_set_abort_flip(screen);
+
+        /* Drop reference to any pending flip or unflip pixmaps. */
+        present_flip_idle(screen);
+    }
 }
 
 void

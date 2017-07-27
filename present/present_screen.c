@@ -30,21 +30,33 @@ int present_request;
 DevPrivateKeyRec present_screen_private_key;
 DevPrivateKeyRec present_window_private_key;
 
+Bool
+present_check_rootless(ScreenPtr screen)
+{
+    present_screen_priv_ptr screen_priv = present_screen_priv(screen);
+
+    return screen_priv->info && screen_priv->info->rootless;
+}
+
 /*
  * Get a pointer to a present window private, creating if necessary
  */
 present_window_priv_ptr
 present_get_window_priv(WindowPtr window, Bool create)
 {
-    present_window_priv_ptr window_priv = present_window_priv(window);
+    ScreenPtr                   screen = window->drawable.pScreen;
+    present_screen_priv_ptr     screen_priv = present_screen_priv(screen);
+    present_window_priv_ptr     window_priv = present_window_priv(window);
 
     if (!create || window_priv != NULL)
         return window_priv;
     window_priv = calloc (1, sizeof (present_window_priv_rec));
     if (!window_priv)
         return NULL;
+    xorg_list_append(&window_priv->screen_list, &screen_priv->windows);
     xorg_list_init(&window_priv->vblank);
     xorg_list_init(&window_priv->notifies);
+    window_priv->window = window;
     window_priv->crtc = PresentCrtcNeverSet;
     dixSetPrivate(&window->devPrivates, &present_window_private_key, window_priv);
     return window_priv;
@@ -58,7 +70,7 @@ present_close_screen(ScreenPtr screen)
 {
     present_screen_priv_ptr screen_priv = present_screen_priv(screen);
 
-    present_flip_destroy(screen);
+    present_flips_destroy(screen);
 
     unwrap(screen_priv, screen, CloseScreen);
     (*screen->CloseScreen) (screen);
@@ -89,15 +101,30 @@ present_clear_window_flip(WindowPtr window)
 {
     ScreenPtr                   screen = window->drawable.pScreen;
     present_screen_priv_ptr     screen_priv = present_screen_priv(screen);
-    present_vblank_ptr          flip_pending = screen_priv->flip_pending;
+    present_vblank_ptr          flip_pending;
 
-    if (flip_pending && flip_pending->window == window) {
-        present_set_abort_flip(screen);
-        flip_pending->window = NULL;
-    }
-    if (screen_priv->flip_window == window) {
-        present_restore_screen_pixmap(screen);
-        screen_priv->flip_window = NULL;
+    if (present_check_rootless(screen)) {
+        present_window_priv_ptr window_priv = present_window_priv(window);
+
+        flip_pending = window_priv->flip_pending;
+
+        if (flip_pending) {
+            present_set_abort_flip_rootless(window);
+            flip_pending->window = NULL;
+        }
+        if (window_priv->restore_pixmap)
+            present_restore_window_pixmap_only(window);
+    } else {
+        flip_pending = screen_priv->flip_pending;
+
+        if (flip_pending && flip_pending->window == window) {
+            present_set_abort_flip(screen);
+            flip_pending->window = NULL;
+        }
+        if (screen_priv->flip_window == window) {
+            present_restore_screen_pixmap(screen);
+            screen_priv->flip_window = NULL;
+        }
     }
 }
 
@@ -117,6 +144,7 @@ present_destroy_window(WindowPtr window)
         present_free_events(window);
         present_free_window_vblank(window);
         present_clear_window_flip(window);
+        xorg_list_del(&window_priv->screen_list);
         free(window_priv);
     }
     unwrap(screen_priv, screen, DestroyWindow);
@@ -191,6 +219,7 @@ present_screen_init(ScreenPtr screen, present_screen_info_ptr info)
         wrap(screen_priv, screen, ClipNotify, present_clip_notify);
 
         screen_priv->info = info;
+        xorg_list_init(&screen_priv->windows);
 
         dixSetPrivate(&screen->devPrivates, &present_screen_private_key, screen_priv);
 

@@ -83,6 +83,8 @@ typedef struct present_screen_priv {
     DestroyWindowProcPtr        DestroyWindow;
     ClipNotifyProcPtr           ClipNotify;
 
+    struct xorg_list            windows;
+
     present_vblank_ptr          flip_pending;
     uint64_t                    unflip_event_id;
 
@@ -128,12 +130,28 @@ typedef struct present_event {
 } present_event_rec;
 
 typedef struct present_window_priv {
+    WindowPtr               window;
+    struct xorg_list        screen_list;
+
     present_event_ptr      events;
     RRCrtcPtr              crtc;        /* Last reported CRTC from get_ust_msc */
     uint64_t               msc_offset;
     uint64_t               msc;         /* Last reported MSC from the current crtc */
     struct xorg_list       vblank;
     struct xorg_list       notifies;
+
+    /* Below for rootless mode */
+    PixmapPtr               restore_pixmap;
+
+    present_vblank_ptr      flip_pending;
+    uint64_t                unflip_event_id;
+
+    /* Currently active flipped pixmap and fence */
+    RRCrtcPtr               flip_crtc;
+    uint32_t                flip_serial;
+    PixmapPtr               flip_pixmap;
+    present_fence_ptr       flip_idle_fence;
+    Bool                    flip_sync;
 } present_window_priv_rec, *present_window_priv_ptr;
 
 #define PresentCrtcNeverSet     ((RRCrtcPtr) 1)
@@ -184,13 +202,19 @@ void
 present_vblank_destroy(present_vblank_ptr vblank);
 
 void
-present_flip_destroy(ScreenPtr screen);
+present_flips_destroy(ScreenPtr screen);
 
 void
 present_restore_screen_pixmap(ScreenPtr screen);
 
 void
+present_restore_window_pixmap_only(WindowPtr window);
+
+void
 present_set_abort_flip(ScreenPtr screen);
+
+void
+present_set_abort_flip_rootless(WindowPtr window);
 
 void
 present_check_flip_window(WindowPtr window);
@@ -303,6 +327,9 @@ proc_present_dispatch(ClientPtr client);
 
 int
 sproc_present_dispatch(ClientPtr client);
+
+Bool
+present_check_rootless(ScreenPtr screen);
 
 /*
  * present_screen.c

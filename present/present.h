@@ -76,6 +76,12 @@ typedef Bool (*present_flip_ptr) (RRCrtcPtr crtc,
                                   PixmapPtr pixmap,
                                   Bool sync_flip);
 
+/* Called when the flip with id 'flip_event_id' has been fully processed internally,
+ * and the Extension is waiting with regards to this flip for the information,
+ * that the flips isn't pending anymore.
+ */
+typedef void (*present_flip_executed_ptr) (RRCrtcPtr crtc, uint64_t flip_event_id);
+
 /* "unflip" back to the regular screen scanout buffer
  *
  * present_event_notify should be called with 'event_id' when the unflip occurs.
@@ -83,12 +89,14 @@ typedef Bool (*present_flip_ptr) (RRCrtcPtr crtc,
 typedef void (*present_unflip_ptr) (ScreenPtr screen,
                                     uint64_t event_id);
 
-/* Switch Pixmaps in DDX instead of using the internal mechanism
+/* "unflip" back to the regular window scanout buffer
+ *
+ * present_event_notify should be called with 'event_id' when the unflip occurs.
  */
-typedef Bool (*present_switch_pixmap_ptr) (WindowPtr window, PixmapPtr pixmap, uint64_t flip_event_id);
+typedef void (*present_unflip_rootless_ptr) (WindowPtr window,
+                                    uint64_t event_id);
 
 #define PRESENT_SCREEN_INFO_VERSION         0
-#define XwaylandCapability                  8
 
 typedef struct present_screen_info {
     uint32_t                            version;
@@ -101,10 +109,12 @@ typedef struct present_screen_info {
     uint32_t                            capabilities;
     present_check_flip_ptr              check_flip;
     present_flip_ptr                    flip;
+    present_flip_executed_ptr           flip_executed;
     present_unflip_ptr                  unflip;
+    present_unflip_rootless_ptr         unflip_rootless;
 
-    present_switch_pixmap_ptr           switch_pixmap;
-
+    /* Rootless mode can only be used, when there is exactly one CRTC per window */
+    Bool                                rootless;
 } present_screen_info_rec, *present_screen_info_ptr;
 
 /*
