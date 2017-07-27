@@ -220,7 +220,9 @@ xwl_present_unflip(WindowPtr window, uint64_t event_id)
 {
     struct xwl_window   *xwl_window = xwl_window_from_window(window);
 
-    xwl_window->present_restore_pixmap = NULL;
+    if (xwl_window) {
+        xwl_window->present_restore_pixmap = NULL;
+    }
     present_event_notify(event_id, 0, 0);
 }
 
