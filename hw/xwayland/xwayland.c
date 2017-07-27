@@ -579,9 +579,6 @@ xwl_unrealize_window(WindowPtr window)
     if (xwl_window->frame_callback)
         wl_callback_destroy(xwl_window->frame_callback);
 
-    if (xwl_screen->flipping_window && xwl_window_from_window(xwl_screen->flipping_window) == xwl_window)
-        xwl_screen->flipping_window = NULL;
-
     if (xwl_window->present_frame_callback)
         wl_callback_destroy(xwl_window->present_frame_callback);
 
@@ -634,7 +631,6 @@ xwl_window_post_damage(struct xwl_window *xwl_window)
 
     region = DamageRegion(xwl_window->damage);
     pixmap = (*xwl_screen->screen->GetWindowPixmap) (xwl_window->window);
-    xwl_window->current_pixmap = pixmap;
 
 #ifdef GLAMOR_HAS_GBM
     if (xwl_screen->glamor)
@@ -665,7 +661,7 @@ xwl_screen_post_damage(struct xwl_screen *xwl_screen)
 
     xorg_list_for_each_entry_safe(xwl_window, next_xwl_window,
                                   &xwl_screen->damage_window_list, link_damage) {
-        if (xwl_window == xwl_screen->flipping_window)
+        if (xwl_window->present_restore_pixmap)
             continue;
         /* If we're waiting on a frame callback from the server,
          * don't attach a new buffer. */

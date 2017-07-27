@@ -39,22 +39,12 @@ static const struct wl_buffer_listener release_listener = {
     buffer_release
 };
 
-void xwl_present_commit_buffer_frame(struct xwl_window *xwl_window);
-
 static void
-present_frame_callback(void *data,
-               struct wl_callback *callback,
-               uint32_t time)
+xwl_present_check_events(struct xwl_window *xwl_window)
 {
-    struct xwl_present_event *event, *tmp;
-    struct xwl_window *xwl_window = data;
+    uint64_t                    msc = xwl_window->present_msc;
+    struct xwl_present_event    *event, *tmp;
 
-    wl_callback_destroy(xwl_window->present_frame_callback);
-    xwl_window->present_frame_callback = NULL;
-
-    uint64_t msc = ++xwl_window->present_msc;
-
-    /* Check events */
     xorg_list_for_each_entry_safe(event, tmp, &xwl_window->present_event_list, list) {
         if (event->target_msc <= msc) {
             present_event_notify(event->event_id, 0, msc);
@@ -62,29 +52,31 @@ present_frame_callback(void *data,
             free(event);
         }
     }
+}
 
-    if (!xorg_list_is_empty(&xwl_window->present_event_list)) {
-        /* dummy commit to receive a callback on next frame */
-        xwl_present_commit_buffer_frame(xwl_window);
-    }
+static void
+present_frame_callback(void *data,
+               struct wl_callback *callback,
+               uint32_t time)
+{
+//    struct xwl_present_event *event, *tmp;
+    struct xwl_window *xwl_window = data;
+
+    wl_callback_destroy(xwl_window->present_frame_callback);
+    xwl_window->present_frame_callback = NULL;
+
+    xwl_window->present_msc++;
+
+    xwl_present_check_events(xwl_window);
 }
 
 static const struct wl_callback_listener present_frame_listener = {
     present_frame_callback
 };
 
-void
-xwl_present_commit_buffer_frame(struct xwl_window *xwl_window)
+static void
+xwl_present_commit_buffer_frame(struct xwl_window *xwl_window, PixmapPtr pixmap)
 {
-    PixmapPtr pixmap;
-
-    // TODOX: this doesn't seem to be the solution. I need a better understanding
-    //       of what pixmap I can use for the dummy commit. Is it sometimes just not possible?
-    if (xwl_window->current_pixmap->drawable.pScreen)
-        pixmap = xwl_window->current_pixmap;
-    else
-        pixmap = (*xwl_window->xwl_screen->screen->GetWindowPixmap) (xwl_window->window);
-
     ErrorF("XX xwl_present_commit_buffer_frame: %i, %i\n", pixmap, pixmap->drawable.pScreen);
 
     struct wl_buffer *buffer = xwl_glamor_pixmap_get_wl_buffer(pixmap);
@@ -132,27 +124,27 @@ xwl_present_queue_vblank(RRCrtcPtr crtc,
                         uint64_t event_id,
                         uint64_t msc)
 {
-    /* Queuing events doesn't work yet: call to xwl_present_commit_buffer_frame
-     * for the dummy commit has on special actions a pixmap without screen */
-    return BadAlloc;
+    /*
+     * Queuing events doesn't work yet: There needs to be a Wayland protocol
+     * extension infroming clients about timings.
+     *
+     * See for a proposal for that:
+     * https://cgit.freedesktop.org/wayland/wayland-protocols/tree/stable/presentation-time
+     *
+     */
+    return BadRequest;
     /* */
 
     struct xwl_window *xwl_window = crtc->devPrivate;
     struct xwl_present_event *event;
 
     event = malloc(sizeof *event);
-
     if (!event)
         return BadAlloc;
+
     event->event_id = event_id;
     event->target_msc = msc;
-
     xorg_list_add(&event->list, &xwl_window->present_event_list);
-
-    if (!xwl_window->present_frame_callback) {
-        /* dummy commit to receive a callback on next frame */
-        xwl_present_commit_buffer_frame(xwl_window);
-    }
 
     return Success;
 }
@@ -189,10 +181,13 @@ xwl_present_check_flip(RRCrtcPtr crtc,
                       PixmapPtr pixmap,
                       Bool sync_flip)
 {
-    struct xwl_window *xwl_window = crtc->devPrivate;
-    struct xwl_screen *xwl_screen = xwl_window->xwl_screen;
+    struct xwl_window *xwl_window;
 
-    return xwl_window->present_crtc_fake;
+    xwl_window = xwl_window_from_window(window);
+    if (!xwl_window)
+        return FALSE;
+
+    return xwl_window->present_crtc_fake && xwl_window->present_crtc_fake == crtc;
 }
 
 static Bool
@@ -202,57 +197,31 @@ xwl_present_flip(RRCrtcPtr crtc,
                 PixmapPtr pixmap,
                 Bool sync_flip)
 {
+    struct xwl_window   *xwl_window = crtc->devPrivate;
+    ScreenPtr           screen = xwl_window->xwl_screen->screen;
+
+    if (!xwl_window->present_restore_pixmap)
+        xwl_window->present_restore_pixmap = (*screen->GetWindowPixmap)(xwl_window->window);
+
+    xwl_present_commit_buffer_frame(xwl_window, pixmap);
+
     return TRUE;
 }
 
-/*
- * Queue a flip back to the normal frame buffer
- */
 static void
-xwl_present_unflip(ScreenPtr screen, uint64_t event_id)
+xwl_present_flip_executed(RRCrtcPtr crtc, uint64_t event_id)
 {
-    struct xwl_screen *xwl_screen = xwl_screen_get(screen);
-
-    xwl_screen->flipping_window = NULL;
-    present_event_notify(event_id, 0, 0);
+    struct xwl_window *xwl_window = crtc->devPrivate;
+    present_event_notify(event_id, 0, xwl_window->present_msc);
 }
 
-/*
- * Xwayland specific Pixmap switcher
- */
 static void
-xwl_present_switch_pixmap(WindowPtr window, PixmapPtr pixmap, uint64_t flip_event_id)
+xwl_present_unflip(WindowPtr window, uint64_t event_id)
 {
     struct xwl_window   *xwl_window = xwl_window_from_window(window);
-    struct xwl_screen   *xwl_screen = xwl_window->xwl_screen;
-    ScreenPtr           screen = xwl_screen->screen;
-    WindowPtr           flipping_window = xwl_screen->flipping_window;
-    struct xwl_window   *xwl_flipping_window = xwl_window_from_window(flipping_window);
 
-    if (flipping_window == window){
-        if (!flip_event_id) {
-            /* restoring requested */
-            (*screen->SetWindowPixmap)(window, xwl_window->present_restore_pixmap);
-
-            xwl_window->current_pixmap = xwl_window->present_restore_pixmap;
-            xwl_screen->flipping_window = NULL;
-        }
-    } else {
-        if (flipping_window) {
-            /* we come from another window, restore it */
-            (*screen->SetWindowPixmap)(flipping_window, xwl_flipping_window->present_restore_pixmap);
-        }
-        xwl_window->present_restore_pixmap = (*screen->GetWindowPixmap)(window);
-        (*screen->SetWindowPixmap)(window, pixmap);
-        xwl_screen->flipping_window = window;
-    }
-
-    if (flip_event_id) {
-        xwl_present_commit_buffer_frame(xwl_window);
-        present_event_notify(flip_event_id, 0, xwl_window->present_msc);
-
-        xwl_window->current_pixmap = pixmap;
-    }
+    xwl_window->present_restore_pixmap = NULL;
+    present_event_notify(event_id, 0, 0);
 }
 
 static present_screen_info_rec xwl_present_screen_info = {
@@ -262,11 +231,12 @@ static present_screen_info_rec xwl_present_screen_info = {
     .queue_vblank = xwl_present_queue_vblank,
     .abort_vblank = xwl_present_abort_vblank,
     .flush = xwl_present_flush,
-    .capabilities = PresentCapabilityAsync | XwaylandCapability,
+    .rootless = TRUE,
+    .capabilities = PresentCapabilityAsync,
     .check_flip = xwl_present_check_flip,
     .flip = xwl_present_flip,
-    .unflip = xwl_present_unflip,
-    .switch_pixmap = xwl_present_switch_pixmap
+    .unflip_rootless = xwl_present_unflip,
+    .flip_executed = xwl_present_flip_executed,
 };
 
 Bool

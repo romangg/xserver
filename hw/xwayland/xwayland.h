@@ -101,8 +101,6 @@ struct xwl_screen {
     struct gbm_device *gbm;
     struct glamor_context *glamor_ctx;
 
-    WindowPtr flipping_window;
-
     Atom allow_commits_prop;
 };
 
@@ -121,8 +119,7 @@ struct xwl_window {
     struct wl_callback *present_frame_callback;
     struct xorg_list present_event_list;
 
-    PixmapPtr present_restore_pixmap;
-    PixmapPtr current_pixmap;
+    PixmapPtr present_restore_pixmap;   //TODOX: use just a bool?
 };
 
 
