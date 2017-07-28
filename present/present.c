@@ -149,8 +149,8 @@ present_check_flip(RRCrtcPtr    crtc,
         return FALSE;
     }
 
-    /* In Rootless mode we do individual flips and have one CRTC per window
-     * Therefore these checks are not needed.
+    /* In Rootless mode we do individual flips per window.
+     * In particular the DDX needs to do the eventual compositing tasks.
      */
     if (!present_check_rootless(screen)) {
         /* Make sure the window hasn't been redirected with Composite */
@@ -898,7 +898,7 @@ present_execute(present_vblank_ptr vblank, uint64_t ust, uint64_t crtc_msc)
 
                 DamageDamageRegion(&vblank->window->drawable, damage);
                 if (*screen_priv->info->flip_executed)
-                    (*screen_priv->info->flip_executed) (vblank->crtc, vblank->event_id);
+                    (*screen_priv->info->flip_executed) (vblank->crtc, vblank->event_id, damage);
 
                 return;
             }

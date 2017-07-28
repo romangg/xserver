@@ -80,7 +80,7 @@ typedef Bool (*present_flip_ptr) (RRCrtcPtr crtc,
  * and the Extension is waiting with regards to this flip for the information,
  * that the flips isn't pending anymore.
  */
-typedef void (*present_flip_executed_ptr) (RRCrtcPtr crtc, uint64_t flip_event_id);
+typedef void (*present_flip_executed_ptr) (RRCrtcPtr crtc, uint64_t flip_event_id, RegionPtr damage);
 
 /* "unflip" back to the regular screen scanout buffer
  *
