@@ -76,6 +76,7 @@ struct xwl_screen {
     struct wl_registry *registry;
     struct wl_registry *input_registry;
     struct wl_compositor *compositor;
+    struct wl_subcompositor *subcompositor;
     struct zwp_tablet_manager_v2 *tablet_manager;
     struct wl_shm *shm;
     struct wl_shell *shell;
@@ -114,24 +115,21 @@ struct xwl_window {
     struct wl_callback *frame_callback;
     Bool allow_commits;
 
+    /* Present */
     RRCrtcPtr present_crtc_fake;
+    WindowPtr present_window;
+    struct wl_surface *present_surface;
+    struct wl_subsurface *present_subsurface;
     uint64_t present_msc;
     struct wl_callback *present_frame_callback;
     struct xorg_list present_event_list;
-
-    PixmapPtr present_restore_pixmap;   //TODOX: use just a bool?
 };
-
 
 struct xwl_present_event {
     uint64_t event_id;
     uint64_t target_msc;
 
     struct xorg_list list;
-};
-
-struct xwl_buffer {
-    struct wl_surface *surface;
 };
 
 #define MODIFIER_META 0x01

@@ -661,7 +661,7 @@ xwl_screen_post_damage(struct xwl_screen *xwl_screen)
 
     xorg_list_for_each_entry_safe(xwl_window, next_xwl_window,
                                   &xwl_screen->damage_window_list, link_damage) {
-        if (xwl_window->present_restore_pixmap)
+        if (xwl_window->present_surface && !xwl_window->present_subsurface)
             continue;
         /* If we're waiting on a frame callback from the server,
          * don't attach a new buffer. */
@@ -684,6 +684,10 @@ registry_global(void *data, struct wl_registry *registry, uint32_t id,
     if (strcmp(interface, "wl_compositor") == 0) {
         xwl_screen->compositor =
             wl_registry_bind(registry, id, &wl_compositor_interface, 1);
+    }
+    else if (strcmp(interface, "wl_subcompositor") == 0) {
+        xwl_screen->subcompositor =
+            wl_registry_bind(registry, id, &wl_subcompositor_interface, 1);
     }
     else if (strcmp(interface, "wl_shm") == 0) {
         xwl_screen->shm = wl_registry_bind(registry, id, &wl_shm_interface, 1);

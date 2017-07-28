@@ -74,27 +74,6 @@ static const struct wl_callback_listener present_frame_listener = {
     present_frame_callback
 };
 
-static void
-xwl_present_commit_buffer_frame(struct xwl_window *xwl_window, PixmapPtr pixmap)
-{
-    ErrorF("XX xwl_present_commit_buffer_frame: %i, %i\n", pixmap, pixmap->drawable.pScreen);
-
-    struct wl_buffer *buffer = xwl_glamor_pixmap_get_wl_buffer(pixmap);
-    wl_surface_attach(xwl_window->surface, buffer, 0, 0);
-
-    wl_surface_damage(xwl_window->surface, 0, 0, pixmap->drawable.width, pixmap->drawable.height);
-
-    if (!xwl_window->present_frame_callback) {
-        xwl_window->present_frame_callback = wl_surface_frame(xwl_window->surface);
-        wl_callback_add_listener(xwl_window->present_frame_callback, &present_frame_listener, xwl_window);
-    }
-
-//    wl_buffer_add_listener(buffer, &release_listener, event); //TODOX: if we can use it, we need make sure this only happens once per wl_buffer/Pixmap
-    wl_surface_commit(xwl_window->surface);
-
-    wl_display_flush(xwl_window->xwl_screen->display);
-}
-
 static RRCrtcPtr
 xwl_present_get_crtc(WindowPtr window)
 {
@@ -181,13 +160,28 @@ xwl_present_check_flip(RRCrtcPtr crtc,
                       PixmapPtr pixmap,
                       Bool sync_flip)
 {
-    struct xwl_window *xwl_window;
+    /* We make sure compositing is active. TODOX: Is this always the case in Xwayland anyway? */
+#ifdef COMPOSITE
+    struct xwl_window *xwl_window = crtc->devPrivate;
 
-    xwl_window = xwl_window_from_window(window);
     if (!xwl_window)
         return FALSE;
 
-    return xwl_window->present_crtc_fake && xwl_window->present_crtc_fake == crtc;
+    /* In order to reduce complexity, we currently allow only one subsurface, i.e. one completely visible region */
+    if (RegionNumRects(&window->clipList) > 1)
+        return FALSE;
+
+    /* Make sure the client doesn't try to flip to another crtc,
+     * than the one created for 'xwl_window'
+     */
+    Bool ret = xwl_window->present_crtc_fake && xwl_window->present_crtc_fake == crtc;
+
+    if (ret && (!xwl_window->present_window || xwl_window->present_window == window)) {
+        xwl_window->present_window = window;
+        return TRUE;
+    }
+#endif
+    return FALSE;
 }
 
 static Bool
@@ -198,20 +192,58 @@ xwl_present_flip(RRCrtcPtr crtc,
                 Bool sync_flip)
 {
     struct xwl_window   *xwl_window = crtc->devPrivate;
-    ScreenPtr           screen = xwl_window->xwl_screen->screen;
+    struct xwl_screen   *xwl_screen = xwl_window->xwl_screen;
+    ScreenPtr           screen = xwl_screen->screen;
+    WindowPtr           window = xwl_window->window;
+    WindowPtr           present_window = xwl_window->present_window;
 
-    if (!xwl_window->present_restore_pixmap)
-        xwl_window->present_restore_pixmap = (*screen->GetWindowPixmap)(xwl_window->window);
+    if (window != present_window) {
+        if (!xwl_window->present_surface) {
+            xwl_window->present_surface =  wl_compositor_create_surface(xwl_window->xwl_screen->compositor);
+            wl_surface_set_user_data(xwl_window->present_surface, xwl_window);
 
-    xwl_present_commit_buffer_frame(xwl_window, pixmap);
+            xwl_window->present_subsurface =
+                    wl_subcompositor_get_subsurface(xwl_screen->subcompositor, xwl_window->present_surface, xwl_window->surface);
+
+            wl_subsurface_set_desync(xwl_window->present_subsurface);
+        }
+
+        /* We calculate relative to 'firstChild', because 'xwl_window'
+         * includes additionally to the pure wl_surface the window border.
+         */
+        int32_t local_x = present_window->clipList.extents.x1 - window->firstChild->winSize.extents.x1;
+        int32_t local_y = present_window->clipList.extents.y1 - window->firstChild->winSize.extents.y1;
+        wl_subsurface_set_position(xwl_window->present_subsurface, local_x, local_y);
+    } else if (!xwl_window->present_surface) {
+        xwl_window->present_surface = xwl_window->surface;
+    }
+
+    struct wl_buffer *buffer = xwl_glamor_pixmap_get_wl_buffer(pixmap);
+    wl_surface_attach(xwl_window->present_surface, buffer, 0, 0);
+
+    if (!xwl_window->present_frame_callback) {
+        xwl_window->present_frame_callback = wl_surface_frame(xwl_window->present_surface);
+        wl_callback_add_listener(xwl_window->present_frame_callback, &present_frame_listener, xwl_window);
+    }
+
+//    wl_buffer_add_listener(buffer, &release_listener, event); //TODOX: if we can use it, we need make sure this only happens once per wl_buffer/Pixmap
+//    wl_surface_commit(xwl_window->present_surface);
 
     return TRUE;
 }
 
 static void
-xwl_present_flip_executed(RRCrtcPtr crtc, uint64_t event_id)
+xwl_present_flip_executed(RRCrtcPtr crtc, uint64_t event_id, RegionPtr damage)
 {
     struct xwl_window *xwl_window = crtc->devPrivate;
+    BoxPtr box = RegionExtents(damage);
+
+    wl_surface_damage(xwl_window->present_surface, box->x1, box->y1,
+                      box->x2 - box->x1, box->y2 - box->y1);
+
+    wl_surface_commit(xwl_window->present_surface);
+    wl_display_flush(xwl_window->xwl_screen->display);
+
     present_event_notify(event_id, 0, xwl_window->present_msc);
 }
 
@@ -221,7 +253,13 @@ xwl_present_unflip(WindowPtr window, uint64_t event_id)
     struct xwl_window   *xwl_window = xwl_window_from_window(window);
 
     if (xwl_window) {
-        xwl_window->present_restore_pixmap = NULL;
+        if (xwl_window->present_subsurface) {
+            wl_subsurface_destroy(xwl_window->present_subsurface);
+            wl_surface_destroy(xwl_window->present_surface);
+            xwl_window->present_subsurface = NULL;
+            xwl_window->present_surface = NULL;
+        }
+        xwl_window->present_window = NULL;
     }
     present_event_notify(event_id, 0, 0);
 }
