@@ -152,7 +152,7 @@ present_check_flip(RRCrtcPtr    crtc,
     /* In Rootless mode we do individual flips per window.
      * In particular the DDX needs to do the eventual compositing tasks.
      */
-    if (!present_check_rootless(screen)) {
+    if (!screen_priv->rootless) {
         /* Make sure the window hasn't been redirected with Composite */
         window_pixmap = screen->GetWindowPixmap(window);
         if (window_pixmap != screen->GetScreenPixmap(screen) &&
@@ -580,7 +580,7 @@ present_flip_notify(present_vblank_ptr vblank, uint64_t ust, uint64_t crtc_msc)
                   vblank->pixmap ? vblank->pixmap->drawable.id : 0,
                   vblank->window ? vblank->window->drawable.id : 0));
 
-    if (present_check_rootless(screen)) {
+    if (screen_priv->rootless) {
         assert (vblank == window_priv->flip_pending);
 
         present_flip_idle_rootless(window);
@@ -670,7 +670,7 @@ present_event_notify(uint64_t event_id, uint64_t ust, uint64_t msc)
         ScreenPtr               screen = screenInfo.screens[s];
         present_screen_priv_ptr screen_priv = present_screen_priv(screen);
 
-        if (present_check_rootless(screen)) {
+        if (screen_priv->rootless) {
             present_window_priv_ptr window_priv;
 
             xorg_list_for_each_entry(window_priv, &screen_priv->windows, screen_list) {
@@ -714,7 +714,7 @@ present_check_flip_window (WindowPtr window)
     if (!window_priv)
         return;
 
-    if (present_check_rootless(screen)) {
+    if (screen_priv->rootless) {
         if (window_priv->unflip_event_id)
             return;
 
@@ -793,7 +793,6 @@ present_execute(present_vblank_ptr vblank, uint64_t ust, uint64_t crtc_msc)
     ScreenPtr                   screen = window->drawable.pScreen;
     present_window_priv_ptr     window_priv = present_window_priv(window);
     present_screen_priv_ptr     screen_priv = present_screen_priv(screen);
-    Bool                        rootless = present_check_rootless(screen);
     uint8_t                     mode;
 
     if (vblank->requeue) {
@@ -815,7 +814,7 @@ present_execute(present_vblank_ptr vblank, uint64_t ust, uint64_t crtc_msc)
 
     if (vblank->flip && vblank->pixmap && vblank->window) {
         Bool needs_waiting = FALSE;
-        if (rootless) {
+        if (screen_priv->rootless) {
             if (window_priv->flip_pending || window_priv->unflip_event_id) {
                 DebugPresent(("\tr %lld %p (pending %p unflip %lld)\n",
                               vblank->event_id, vblank,
@@ -853,7 +852,7 @@ present_execute(present_vblank_ptr vblank, uint64_t ust, uint64_t crtc_msc)
             /* Prepare to flip by placing it in the flip queue and
              * and sticking it into the flip_pending field
              */
-            if (rootless)
+            if (screen_priv->rootless)
                 window_priv->flip_pending = vblank;
             else
                 screen_priv->flip_pending = vblank;
@@ -864,7 +863,7 @@ present_execute(present_vblank_ptr vblank, uint64_t ust, uint64_t crtc_msc)
             if (present_flip(vblank->crtc, vblank->event_id, vblank->target_msc, vblank->pixmap, vblank->sync_flip)) {
                 RegionPtr damage;
 
-                if (rootless) {
+                if (screen_priv->rootless) {
                     /* Fix window pixmaps:
                      *  1) Remember original window pixmap
                      *  2) Set current flip window pixmap to the new pixmap
@@ -906,7 +905,7 @@ present_execute(present_vblank_ptr vblank, uint64_t ust, uint64_t crtc_msc)
             xorg_list_del(&vblank->event_queue);
             /* Oops, flip failed. Clear the flip_pending field
               */
-            if (rootless)
+            if (screen_priv->rootless)
                 window_priv->flip_pending = NULL;
             else
                 screen_priv->flip_pending = NULL;
@@ -915,7 +914,7 @@ present_execute(present_vblank_ptr vblank, uint64_t ust, uint64_t crtc_msc)
         }
         DebugPresent(("\tc %p %8lld: %08lx -> %08lx\n", vblank, crtc_msc, vblank->pixmap->drawable.id, vblank->window->drawable.id));
 
-        if (rootless) {
+        if (screen_priv->rootless) {
             if (window_priv->flip_pending) {
                 present_set_abort_flip_rootless(window);
             } else if (!window_priv->unflip_event_id && window_priv->flip_pixmap) {
@@ -1231,7 +1230,7 @@ present_flips_destroy(ScreenPtr screen)
 {
     present_screen_priv_ptr     screen_priv = present_screen_priv(screen);
 
-    if (present_check_rootless(screen)) {
+    if (screen_priv->rootless) {
         present_window_priv_ptr window_priv;
 
         xorg_list_for_each_entry(window_priv, &screen_priv->windows, screen_list) {

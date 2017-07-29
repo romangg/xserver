@@ -83,6 +83,7 @@ typedef struct present_screen_priv {
     DestroyWindowProcPtr        DestroyWindow;
     ClipNotifyProcPtr           ClipNotify;
 
+    Bool                        rootless;
     struct xorg_list            windows;
 
     present_vblank_ptr          flip_pending;

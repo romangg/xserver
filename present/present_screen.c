@@ -30,14 +30,6 @@ int present_request;
 DevPrivateKeyRec present_screen_private_key;
 DevPrivateKeyRec present_window_private_key;
 
-Bool
-present_check_rootless(ScreenPtr screen)
-{
-    present_screen_priv_ptr screen_priv = present_screen_priv(screen);
-
-    return screen_priv->info && screen_priv->info->rootless;
-}
-
 /*
  * Get a pointer to a present window private, creating if necessary
  */
@@ -103,7 +95,7 @@ present_clear_window_flip(WindowPtr window)
     present_screen_priv_ptr     screen_priv = present_screen_priv(screen);
     present_vblank_ptr          flip_pending;
 
-    if (present_check_rootless(screen)) {
+    if (screen_priv->rootless) {
         present_window_priv_ptr window_priv = present_window_priv(window);
 
         flip_pending = window_priv->flip_pending;
@@ -219,6 +211,7 @@ present_screen_init(ScreenPtr screen, present_screen_info_ptr info)
         wrap(screen_priv, screen, ClipNotify, present_clip_notify);
 
         screen_priv->info = info;
+        screen_priv->rootless = info && info->rootless;
         xorg_list_init(&screen_priv->windows);
 
         dixSetPrivate(&screen->devPrivates, &present_screen_private_key, screen_priv);
