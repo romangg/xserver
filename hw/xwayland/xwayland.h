@@ -118,6 +118,7 @@ struct xwl_window {
     /* Present */
     RRCrtcPtr present_crtc_fake;
     WindowPtr present_window;
+    Bool present_need_configure;
     struct wl_surface *present_surface;
     struct wl_subsurface *present_subsurface;
     uint64_t present_msc;

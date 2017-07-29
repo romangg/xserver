@@ -161,27 +161,41 @@ xwl_present_check_flip(RRCrtcPtr crtc,
                       Bool sync_flip)
 {
     /* We make sure compositing is active. TODOX: Is this always the case in Xwayland anyway? */
-#ifdef COMPOSITE
+#ifndef COMPOSITE
+    return FALSE;
+#endif
     struct xwl_window *xwl_window = crtc->devPrivate;
 
     if (!xwl_window)
+        return FALSE;
+    if (!xwl_window->present_crtc_fake)
+        return FALSE;
+    /* Make sure the client doesn't try to flip to another crtc
+     * than the one created for 'xwl_window'
+     */
+    if (xwl_window->present_crtc_fake != crtc)
         return FALSE;
 
     /* In order to reduce complexity, we currently allow only one subsurface, i.e. one completely visible region */
     if (RegionNumRects(&window->clipList) > 1)
         return FALSE;
 
-    /* Make sure the client doesn't try to flip to another crtc,
-     * than the one created for 'xwl_window'
-     */
-    Bool ret = xwl_window->present_crtc_fake && xwl_window->present_crtc_fake == crtc;
-
-    if (ret && (!xwl_window->present_window || xwl_window->present_window == window)) {
+    if (xwl_window->present_window != window) {
         xwl_window->present_window = window;
-        return TRUE;
+        xwl_window->present_need_configure = TRUE;
     }
-#endif
-    return FALSE;
+    return TRUE;
+}
+
+static void
+xwl_present_cleanup_surfaces(struct xwl_window *xwl_window)
+{
+    if (xwl_window->present_subsurface) {
+        wl_subsurface_destroy(xwl_window->present_subsurface);
+        wl_surface_destroy(xwl_window->present_surface);
+        xwl_window->present_subsurface = NULL;
+    }
+    xwl_window->present_surface = NULL;
 }
 
 static Bool
@@ -197,8 +211,19 @@ xwl_present_flip(RRCrtcPtr crtc,
     WindowPtr           window = xwl_window->window;
     WindowPtr           present_window = xwl_window->present_window;
 
-    if (window != present_window) {
-        if (!xwl_window->present_surface) {
+    if (xwl_window->present_need_configure) {
+        xwl_window->present_need_configure = FALSE;
+        xwl_present_cleanup_surfaces(xwl_window);
+
+        if (RegionNumRects(&window->clipList) == 0 || RegionEqual(&window->clipList, &present_window->winSize)) {
+            /* We can flip directly to the main surface (full screen window) */
+            xwl_window->present_surface = xwl_window->surface;
+        } else {
+            // TODOX: I fear we need to sub-composite ALL child windows in this case.
+            ErrorF("XX xwl_present_flip SUB\n");
+            RegionPrint(&window->clipList);
+            RegionPrint(&present_window->clipList);
+
             xwl_window->present_surface =  wl_compositor_create_surface(xwl_window->xwl_screen->compositor);
             wl_surface_set_user_data(xwl_window->present_surface, xwl_window);
 
@@ -206,16 +231,15 @@ xwl_present_flip(RRCrtcPtr crtc,
                     wl_subcompositor_get_subsurface(xwl_screen->subcompositor, xwl_window->present_surface, xwl_window->surface);
 
             wl_subsurface_set_desync(xwl_window->present_subsurface);
-        }
 
-        /* We calculate relative to 'firstChild', because 'xwl_window'
-         * includes additionally to the pure wl_surface the window border.
-         */
-        int32_t local_x = present_window->clipList.extents.x1 - window->firstChild->winSize.extents.x1;
-        int32_t local_y = present_window->clipList.extents.y1 - window->firstChild->winSize.extents.y1;
-        wl_subsurface_set_position(xwl_window->present_subsurface, local_x, local_y);
-    } else if (!xwl_window->present_surface) {
-        xwl_window->present_surface = xwl_window->surface;
+            /* We calculate relative to 'firstChild', because 'xwl_window'
+             * includes additionally to the pure wl_surface the window border.
+             */
+            int32_t local_x = present_window->clipList.extents.x1 - window->firstChild->winSize.extents.x1;
+            int32_t local_y = present_window->clipList.extents.y1 - window->firstChild->winSize.extents.y1;
+
+            wl_subsurface_set_position(xwl_window->present_subsurface, local_x, local_y);
+        }
     }
 
     struct wl_buffer *buffer = xwl_glamor_pixmap_get_wl_buffer(pixmap);
@@ -252,13 +276,8 @@ xwl_present_unflip(WindowPtr window, uint64_t event_id)
 {
     struct xwl_window   *xwl_window = xwl_window_from_window(window);
 
-    if (xwl_window) {
-        if (xwl_window->present_subsurface) {
-            wl_subsurface_destroy(xwl_window->present_subsurface);
-            wl_surface_destroy(xwl_window->present_surface);
-            xwl_window->present_subsurface = NULL;
-            xwl_window->present_surface = NULL;
-        }
+    if(xwl_window) {
+        xwl_present_cleanup_surfaces(xwl_window);
         xwl_window->present_window = NULL;
     }
     present_event_notify(event_id, 0, 0);

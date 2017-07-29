@@ -661,6 +661,7 @@ xwl_screen_post_damage(struct xwl_screen *xwl_screen)
 
     xorg_list_for_each_entry_safe(xwl_window, next_xwl_window,
                                   &xwl_screen->damage_window_list, link_damage) {
+        /* Present on the main surface. So don't commit here as well. */
         if (xwl_window->present_surface && !xwl_window->present_subsurface)
             continue;
         /* If we're waiting on a frame callback from the server,
