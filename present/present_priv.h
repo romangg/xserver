@@ -221,6 +221,9 @@ present_set_abort_flip_rootless(WindowPtr window);
 void
 present_check_flip_window(WindowPtr window);
 
+void
+present_free_window_vblank_idle(WindowPtr window);
+
 RRCrtcPtr
 present_get_crtc(WindowPtr window);
 

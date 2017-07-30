@@ -422,24 +422,14 @@ present_flip_idle_rootless(WindowPtr window)
 static void
 present_flip_idle_rootless_vblank(present_vblank_ptr vblank)
 {
-//    WindowPtr window = vblank->window;
-//    present_window_priv_ptr window_priv = present_window_priv(window);
+    ErrorF("PP present_flip_idle_rootless_vblank 1: %i\n", vblank->event_id);
 
-//    if (vblank->pixmap) {
-        present_pixmap_idle(vblank->pixmap, vblank->window,
-                            vblank->serial, vblank->idle_fence);
-//        if (vblank->idle_fence)
-//            present_fence_destroy(vblank->idle_fence);
+    present_pixmap_idle(vblank->pixmap, vblank->window,
+                        vblank->serial, vblank->idle_fence);
 
-//        dixDestroyPixmap(vblank->pixmap, vblank->pixmap->drawable.id);
+    ErrorF("PP present_flip_idle_rootless_vblank 2: %i\n", vblank->event_id);
 
-        present_vblank_destroy(vblank);
-
-//        window_priv->flip_crtc = NULL;
-//        window_priv->flip_serial = 0;
-//        window_priv->flip_pixmap = NULL;
-//        window_priv->flip_idle_fence = NULL;
-//    }
+    present_vblank_destroy(vblank);
 }
 
 struct pixmap_visit {
@@ -575,24 +565,32 @@ present_unflip(ScreenPtr screen)
     (*screen_priv->info->unflip) (screen, screen_priv->unflip_event_id);
 }
 
+/*
+ * Free any left over idle vblanks
+ */
+void
+present_free_window_vblank_idle(WindowPtr window)
+{
+    present_window_priv_ptr         window_priv = present_window_priv(window);
+    present_vblank_ptr              vblank, tmp;
+
+    xorg_list_for_each_entry_safe(vblank, tmp, &window_priv->idle_vblank, window_list) {
+        /* Deletes it from this list as well. */
+        present_flip_idle_rootless_vblank(vblank);
+//        xorg_list_del(&vblank->event_queue);
+    }
+}
+
 static void
 present_unflip_rootless(WindowPtr window)
 {
     present_window_priv_ptr window_priv = present_window_priv(window);
     present_screen_priv_ptr screen_priv = present_screen_priv(window->drawable.pScreen);
 
-    present_vblank_ptr          vblank, tmp;
-
-
     assert (!window_priv->unflip_event_id);
     assert (!window_priv->flip_pending);
 
-    xorg_list_for_each_entry_safe(vblank, tmp, &present_idle_queue, event_queue) {
-        if (vblank->window == window) {
-            // TODOX: cleanup and send notify about reuse
-        }
-    }
-
+    present_free_window_vblank_idle(window);
     present_restore_window_pixmap_only(window);
 
     window_priv->unflip_event_id = ++present_event_id;
@@ -680,6 +678,7 @@ present_event_notify(uint64_t event_id, uint64_t ust, uint64_t msc)
 {
     present_vblank_ptr  vblank;
     int                 s;
+    ErrorF("PP present_event_notify: %i\n", event_id);
 
     if (!event_id)
         return;
@@ -704,9 +703,8 @@ present_event_notify(uint64_t event_id, uint64_t ust, uint64_t msc)
 
     xorg_list_for_each_entry(vblank, &present_idle_queue, event_queue) {
         if (vblank->event_id == event_id) {
-            ErrorF("PP present_event_notify: %i\n", event_id);
+            ErrorF("PP present_event_notify X: %i\n", event_id);
             present_flip_idle_rootless_vblank(vblank);
-//            present_vblank_destroy(vblank);
             return;
         }
     }
@@ -1302,6 +1300,8 @@ present_vblank_destroy(present_vblank_ptr vblank)
     /* Remove vblank from window and screen lists */
     xorg_list_del(&vblank->window_list);
 
+    xorg_list_del(&vblank->event_queue);
+
     DebugPresent(("\td %lld %p %8lld: %08lx -> %08lx\n",
                   vblank->event_id, vblank, vblank->target_msc,
                   vblank->pixmap ? vblank->pixmap->drawable.id : 0,
@@ -1325,6 +1325,8 @@ present_vblank_destroy(present_vblank_ptr vblank)
 
     if (vblank->notifies)
         present_destroy_notifies(vblank->notifies, vblank->num_notifies);
+
+    ErrorF("PP present_vblank_destroy: %i\n", vblank->event_id);
 
     free(vblank);
 }

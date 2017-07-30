@@ -137,8 +137,7 @@ present_destroy_window(WindowPtr window)
         present_free_events(window);
         present_free_window_vblank(window);
         present_clear_window_flip(window);
-
-        // TODOX: clean up present_idle_queue
+        present_free_window_vblank_idle(window);
 
         xorg_list_del(&window_priv->screen_list);
         free(window_priv);
