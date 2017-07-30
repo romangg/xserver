@@ -88,6 +88,8 @@ static int
 xwl_present_get_ust_msc(RRCrtcPtr crtc, CARD64 *ust, CARD64 *msc)
 {
     struct xwl_window *xwl_window = crtc->devPrivate;
+    if (!xwl_window)
+        return BadAlloc;
     *ust = 0;
     *msc = xwl_window->present_msc;
 
@@ -216,9 +218,15 @@ xwl_present_flip(RRCrtcPtr crtc,
         xwl_present_cleanup_surfaces(xwl_window);
 
         if (RegionNumRects(&window->clipList) == 0 || RegionEqual(&window->clipList, &present_window->winSize)) {
+            ErrorF("XX xwl_present_flip MAIN\n");
             /* We can flip directly to the main surface (full screen window) */
             xwl_window->present_surface = xwl_window->surface;
         } else {
+            /* remove this part if we want to reenable sub compositing */
+            xwl_window->present_need_configure = TRUE;
+            return FALSE;
+            /**/
+
             // TODOX: I fear we need to sub-composite ALL child windows in this case.
             ErrorF("XX xwl_present_flip SUB\n");
             RegionPrint(&window->clipList);
