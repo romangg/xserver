@@ -158,12 +158,15 @@ xwl_glamor_pixmap_get_wl_buffer(PixmapPtr pixmap, Bool *created)
     struct xwl_screen *xwl_screen = xwl_screen_get(pixmap->drawable.pScreen);
     struct xwl_pixmap *xwl_pixmap = xwl_pixmap_get(pixmap);
     int prime_fd;
-    *created = FALSE;
 
-    if (xwl_pixmap->buffer)
+    if (xwl_pixmap->buffer) {
+        if(created)
+            *created = FALSE;
         return xwl_pixmap->buffer;
+    }
 
-    *created = TRUE;
+    if(created)
+        *created = TRUE;
 
     prime_fd = gbm_bo_get_fd(xwl_pixmap->bo);
     if (prime_fd == -1)
