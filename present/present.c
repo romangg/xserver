@@ -35,6 +35,7 @@
 static uint64_t         present_event_id;
 static struct xorg_list present_exec_queue;
 static struct xorg_list present_flip_queue;
+static struct xorg_list present_idle_queue;
 
 #if 0
 #define DebugPresent(x) ErrorF x
@@ -418,6 +419,29 @@ present_flip_idle_rootless(WindowPtr window)
     }
 }
 
+static void
+present_flip_idle_rootless_vblank(present_vblank_ptr vblank)
+{
+//    WindowPtr window = vblank->window;
+//    present_window_priv_ptr window_priv = present_window_priv(window);
+
+//    if (vblank->pixmap) {
+        present_pixmap_idle(vblank->pixmap, vblank->window,
+                            vblank->serial, vblank->idle_fence);
+//        if (vblank->idle_fence)
+//            present_fence_destroy(vblank->idle_fence);
+
+//        dixDestroyPixmap(vblank->pixmap, vblank->pixmap->drawable.id);
+
+        present_vblank_destroy(vblank);
+
+//        window_priv->flip_crtc = NULL;
+//        window_priv->flip_serial = 0;
+//        window_priv->flip_pixmap = NULL;
+//        window_priv->flip_idle_fence = NULL;
+//    }
+}
+
 struct pixmap_visit {
     PixmapPtr   old;
     PixmapPtr   new;
@@ -557,8 +581,17 @@ present_unflip_rootless(WindowPtr window)
     present_window_priv_ptr window_priv = present_window_priv(window);
     present_screen_priv_ptr screen_priv = present_screen_priv(window->drawable.pScreen);
 
+    present_vblank_ptr          vblank, tmp;
+
+
     assert (!window_priv->unflip_event_id);
     assert (!window_priv->flip_pending);
+
+    xorg_list_for_each_entry_safe(vblank, tmp, &present_idle_queue, event_queue) {
+        if (vblank->window == window) {
+            // TODOX: cleanup and send notify about reuse
+        }
+    }
 
     present_restore_window_pixmap_only(window);
 
@@ -583,7 +616,7 @@ present_flip_notify(present_vblank_ptr vblank, uint64_t ust, uint64_t crtc_msc)
     if (screen_priv->rootless) {
         assert (vblank == window_priv->flip_pending);
 
-        present_flip_idle_rootless(window);
+//        present_flip_idle_rootless(window);
 
         xorg_list_del(&vblank->event_queue);
 
@@ -594,16 +627,21 @@ present_flip_notify(present_vblank_ptr vblank, uint64_t ust, uint64_t crtc_msc)
         window_priv->flip_sync = vblank->sync_flip;
         window_priv->flip_idle_fence = vblank->idle_fence;
 
-        vblank->pixmap = NULL;
-        vblank->idle_fence = NULL;
+//        vblank->pixmap = NULL;
+//        vblank->idle_fence = NULL;
 
         window_priv->flip_pending = NULL;
 
-        if (vblank->abort_flip)
+        if (vblank->abort_flip) {
             present_unflip_rootless(window);
+        } else {
+            /* Put the flip back in the window_list and wait for further notice from DDX */
+            xorg_list_append(&vblank->window_list, &window_priv->idle_vblank);
+            xorg_list_append(&vblank->event_queue, &present_idle_queue);
+        }
 
         present_vblank_notify(vblank, PresentCompleteKindPixmap, PresentCompleteModeFlip, ust, crtc_msc);
-        present_vblank_destroy(vblank);
+//        present_vblank_destroy(vblank);
 
         present_flip_try_ready_rootless(window);
 
@@ -634,9 +672,7 @@ present_flip_notify(present_vblank_ptr vblank, uint64_t ust, uint64_t crtc_msc)
         present_vblank_destroy(vblank);
 
         present_flip_try_ready(screen);
-
     }
-
 }
 
 void
@@ -662,6 +698,15 @@ present_event_notify(uint64_t event_id, uint64_t ust, uint64_t msc)
                 assert(vblank->window);
                 present_flip_notify(vblank, ust, msc);
             }
+            return;
+        }
+    }
+
+    xorg_list_for_each_entry(vblank, &present_idle_queue, event_queue) {
+        if (vblank->event_id == event_id) {
+            ErrorF("PP present_event_notify: %i\n", event_id);
+            present_flip_idle_rootless_vblank(vblank);
+//            present_vblank_destroy(vblank);
             return;
         }
     }
@@ -1289,6 +1334,7 @@ present_init(void)
 {
     xorg_list_init(&present_exec_queue);
     xorg_list_init(&present_flip_queue);
+    xorg_list_init(&present_idle_queue);
     present_fake_queue_init();
     return TRUE;
 }

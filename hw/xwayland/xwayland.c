@@ -435,6 +435,8 @@ xwl_realize_window(WindowPtr window)
     struct wl_region *region;
     Bool ret;
 
+    ErrorF("XX xwl_realize_window\n");
+
     xwl_screen = xwl_screen_get(screen);
 
     screen->RealizeWindow = xwl_screen->RealizeWindow;
@@ -634,7 +636,7 @@ xwl_window_post_damage(struct xwl_window *xwl_window)
 
 #ifdef GLAMOR_HAS_GBM
     if (xwl_screen->glamor)
-        buffer = xwl_glamor_pixmap_get_wl_buffer(pixmap);
+        buffer = xwl_glamor_pixmap_get_wl_buffer(pixmap, NULL);
     else
 #endif
         buffer = xwl_shm_pixmap_get_wl_buffer(pixmap);
