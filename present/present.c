@@ -401,25 +401,6 @@ present_flip_idle(ScreenPtr screen)
 }
 
 static void
-present_flip_idle_rootless(WindowPtr window)
-{
-    present_window_priv_ptr window_priv = present_window_priv(window);
-
-    if (window_priv->flip_pixmap) {
-        present_pixmap_idle(window_priv->flip_pixmap, window,
-                            window_priv->flip_serial, window_priv->flip_idle_fence);
-        if (window_priv->flip_idle_fence)
-            present_fence_destroy(window_priv->flip_idle_fence);
-
-        dixDestroyPixmap(window_priv->flip_pixmap, window_priv->flip_pixmap->drawable.id);
-        window_priv->flip_crtc = NULL;
-        window_priv->flip_serial = 0;
-        window_priv->flip_pixmap = NULL;
-        window_priv->flip_idle_fence = NULL;
-    }
-}
-
-static void
 present_flip_idle_rootless_vblank(present_vblank_ptr vblank)
 {
     ErrorF("PP present_flip_idle_rootless_vblank 1: %i\n", vblank->event_id);
@@ -430,6 +411,17 @@ present_flip_idle_rootless_vblank(present_vblank_ptr vblank)
     ErrorF("PP present_flip_idle_rootless_vblank 2: %i\n", vblank->event_id);
 
     present_vblank_destroy(vblank);
+}
+
+static void
+present_flip_idle_rootless_active(WindowPtr window)
+{
+    present_window_priv_ptr window_priv = present_window_priv(window);
+
+    if (window_priv->flip_active) {
+        present_flip_idle_rootless_vblank(window_priv->flip_active);
+        window_priv->flip_active = NULL;
+    }
 }
 
 struct pixmap_visit {
@@ -506,7 +498,7 @@ present_restore_window_pixmap_only(WindowPtr window)
 {
     ScreenPtr                   screen = window->drawable.pScreen;
     present_window_priv_ptr     window_priv = present_window_priv(window);
-    PixmapPtr                   flip_pixmap = window_priv->flip_pending ? window_priv->flip_pending->pixmap : window_priv->flip_pixmap;
+    PixmapPtr                   flip_pixmap = window_priv->flip_pending ? window_priv->flip_pending->pixmap : window_priv->flip_active->pixmap;
 
     assert (flip_pixmap);
 
@@ -577,7 +569,6 @@ present_free_window_vblank_idle(WindowPtr window)
     xorg_list_for_each_entry_safe(vblank, tmp, &window_priv->idle_vblank, window_list) {
         /* Deletes it from this list as well. */
         present_flip_idle_rootless_vblank(vblank);
-//        xorg_list_del(&vblank->event_queue);
     }
 }
 
@@ -605,6 +596,7 @@ present_flip_notify(present_vblank_ptr vblank, uint64_t ust, uint64_t crtc_msc)
     WindowPtr                   window = vblank->window;
     present_screen_priv_ptr     screen_priv = present_screen_priv(screen);
     present_window_priv_ptr     window_priv = present_window_priv(window);
+    present_vblank_ptr          prev_vblank;
 
     DebugPresent(("\tn %lld %p %8lld: %08lx -> %08lx\n",
                   vblank->event_id, vblank, vblank->target_msc,
@@ -614,33 +606,21 @@ present_flip_notify(present_vblank_ptr vblank, uint64_t ust, uint64_t crtc_msc)
     if (screen_priv->rootless) {
         assert (vblank == window_priv->flip_pending);
 
-//        present_flip_idle_rootless(window);
-
         xorg_list_del(&vblank->event_queue);
 
-        /* Transfer reference for pixmap and fence from vblank to window_priv */
-        window_priv->flip_crtc = vblank->crtc;
-        window_priv->flip_serial = vblank->serial;
-        window_priv->flip_pixmap = vblank->pixmap;
-        window_priv->flip_sync = vblank->sync_flip;
-        window_priv->flip_idle_fence = vblank->idle_fence;
-
-//        vblank->pixmap = NULL;
-//        vblank->idle_fence = NULL;
-
+        if (window_priv->flip_active) {
+            /* Put the flip back in the window_list and wait for further notice from DDX */
+            prev_vblank = window_priv->flip_active;
+            xorg_list_append(&prev_vblank->window_list, &window_priv->idle_vblank);
+            xorg_list_append(&prev_vblank->event_queue, &present_idle_queue);
+        }
+        window_priv->flip_active = vblank;
         window_priv->flip_pending = NULL;
 
-        if (vblank->abort_flip) {
+        if (vblank->abort_flip)
             present_unflip_rootless(window);
-        } else {
-            /* Put the flip back in the window_list and wait for further notice from DDX */
-            xorg_list_append(&vblank->window_list, &window_priv->idle_vblank);
-            xorg_list_append(&vblank->event_queue, &present_idle_queue);
-        }
 
         present_vblank_notify(vblank, PresentCompleteKindPixmap, PresentCompleteModeFlip, ust, crtc_msc);
-//        present_vblank_destroy(vblank);
-
         present_flip_try_ready_rootless(window);
 
     } else {
@@ -678,7 +658,6 @@ present_event_notify(uint64_t event_id, uint64_t ust, uint64_t msc)
 {
     present_vblank_ptr  vblank;
     int                 s;
-    ErrorF("PP present_event_notify: %i\n", event_id);
 
     if (!event_id)
         return;
@@ -703,7 +682,6 @@ present_event_notify(uint64_t event_id, uint64_t ust, uint64_t msc)
 
     xorg_list_for_each_entry(vblank, &present_idle_queue, event_queue) {
         if (vblank->event_id == event_id) {
-            ErrorF("PP present_event_notify X: %i\n", event_id);
             present_flip_idle_rootless_vblank(vblank);
             return;
         }
@@ -720,7 +698,7 @@ present_event_notify(uint64_t event_id, uint64_t ust, uint64_t msc)
                 if (event_id == window_priv->unflip_event_id) {
                     DebugPresent(("\tun %lld\n", event_id));
                     window_priv->unflip_event_id = 0;
-                    present_flip_idle_rootless(window_priv->window);
+                    present_flip_idle_rootless_active(window_priv->window);
                     present_flip_try_ready_rootless(window_priv->window);
                     return;
                 }
@@ -749,6 +727,7 @@ present_check_flip_window (WindowPtr window)
     present_screen_priv_ptr     screen_priv = present_screen_priv(screen);
     present_window_priv_ptr     window_priv = present_window_priv(window);
     present_vblank_ptr          flip_pending;
+    present_vblank_ptr          flip_active;
     present_vblank_ptr          vblank;
 
     /* If this window hasn't ever been used with Present, it can't be
@@ -762,13 +741,15 @@ present_check_flip_window (WindowPtr window)
             return;
 
         flip_pending = window_priv->flip_pending;
+        flip_active = window_priv->flip_active;
 
         if (flip_pending) {
             if (!present_check_flip(flip_pending->crtc, window, flip_pending->pixmap,
                                     flip_pending->sync_flip, NULL, 0, 0))
                 present_set_abort_flip_rootless(window);
-        } else if (window_priv->flip_pixmap) {
-            if (!present_check_flip(window_priv->flip_crtc, window, window_priv->flip_pixmap, window_priv->flip_sync, NULL, 0, 0))
+        } else if (flip_active) {
+
+            if (!present_check_flip(flip_active->crtc, window, flip_active->pixmap, flip_active->sync_flip, NULL, 0, 0))
                 present_unflip_rootless(window);
         }
     } else {
@@ -960,7 +941,7 @@ present_execute(present_vblank_ptr vblank, uint64_t ust, uint64_t crtc_msc)
         if (screen_priv->rootless) {
             if (window_priv->flip_pending) {
                 present_set_abort_flip_rootless(window);
-            } else if (!window_priv->unflip_event_id && window_priv->flip_pixmap) {
+            } else if (!window_priv->unflip_event_id && window_priv->flip_active) {
                 present_unflip_rootless(window);
             }
         } else {
@@ -1282,7 +1263,8 @@ present_flips_destroy(ScreenPtr screen)
                 present_set_abort_flip_rootless(window_priv->window);
 
             /* Drop reference to any pending flip or unflip pixmaps. */
-            present_flip_idle_rootless(window_priv->window);
+            present_free_window_vblank_idle(window_priv->window);
+            present_flip_idle_rootless_active(window_priv->window);
         }
     } else {
         /* Reset window pixmaps back to the screen pixmap */
@@ -1325,8 +1307,6 @@ present_vblank_destroy(present_vblank_ptr vblank)
 
     if (vblank->notifies)
         present_destroy_notifies(vblank->notifies, vblank->num_notifies);
-
-    ErrorF("PP present_vblank_destroy: %i\n", vblank->event_id);
 
     free(vblank);
 }

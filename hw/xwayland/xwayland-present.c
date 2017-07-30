@@ -45,13 +45,6 @@ xwl_present_check_events(struct xwl_window *xwl_window)
 static void
 buffer_release(void *data, struct wl_buffer *buffer)
 {
-//    struct xwl_present_event *event = data;
-
-//    //TODOX: how to translate this in Present extension?
-//    present_event_notify(event->event_id, 0, event->target_msc);
-//    xorg_list_del(&event->list);
-//    free(event);
-
     struct xwl_window *xwl_window = data;
     struct xwl_present_event    *event, *tmp;
 
@@ -63,6 +56,7 @@ buffer_release(void *data, struct wl_buffer *buffer)
             present_event_notify(event->event_id, 0, xwl_window->present_msc);
             xorg_list_del(&event->list);
             free(event);
+            break;
         }
     }
 
@@ -123,6 +117,9 @@ xwl_present_queue_vblank(RRCrtcPtr crtc,
                         uint64_t event_id,
                         uint64_t msc)
 {
+    struct xwl_window *xwl_window = crtc->devPrivate;
+    struct xwl_present_event *event;
+
     /*
      * Queuing events doesn't work yet: There needs to be a Wayland protocol
      * extension infroming clients about timings.
@@ -133,9 +130,6 @@ xwl_present_queue_vblank(RRCrtcPtr crtc,
      */
     return BadRequest;
     /* */
-
-    struct xwl_window *xwl_window = crtc->devPrivate;
-    struct xwl_present_event *event;
 
     event = malloc(sizeof *event);
     if (!event)
@@ -225,12 +219,13 @@ xwl_present_flip(RRCrtcPtr crtc,
                 PixmapPtr pixmap,
                 Bool sync_flip)
 {
-    struct xwl_window   *xwl_window = crtc->devPrivate;
-    struct xwl_screen   *xwl_screen = xwl_window->xwl_screen;
-//    ScreenPtr           screen = xwl_screen->screen;
-    WindowPtr           window = xwl_window->window;
-    WindowPtr           present_window = xwl_window->present_window;
-
+    struct xwl_window           *xwl_window = crtc->devPrivate;
+    struct xwl_screen           *xwl_screen = xwl_window->xwl_screen;
+    WindowPtr                   window = xwl_window->window;
+    WindowPtr                   present_window = xwl_window->present_window;
+    Bool                        buffer_created;
+    int32_t                     local_x, local_y;
+    struct wl_buffer            *buffer;
     struct xwl_present_event    *event;
 
     if (xwl_window->present_need_configure) {
@@ -239,16 +234,18 @@ xwl_present_flip(RRCrtcPtr crtc,
 
         if (RegionNumRects(&window->clipList) == 0 || RegionEqual(&window->clipList, &present_window->winSize)) {
             ErrorF("XX xwl_present_flip MAIN\n");
+
             /* We can flip directly to the main surface (full screen window) */
             xwl_window->present_surface = xwl_window->surface;
         } else {
+            ErrorF("XX xwl_present_flip SUB\n");
+
             /* remove this part if we want to reenable sub compositing */
             xwl_window->present_need_configure = TRUE;
             return FALSE;
             /**/
 
             // TODOX: I fear we need to sub-composite ALL child windows in this case.
-            ErrorF("XX xwl_present_flip SUB\n");
             RegionPrint(&window->clipList);
             RegionPrint(&present_window->clipList);
 
@@ -263,40 +260,30 @@ xwl_present_flip(RRCrtcPtr crtc,
             /* We calculate relative to 'firstChild', because 'xwl_window'
              * includes additionally to the pure wl_surface the window border.
              */
-            int32_t local_x = present_window->clipList.extents.x1 - window->firstChild->winSize.extents.x1;
-            int32_t local_y = present_window->clipList.extents.y1 - window->firstChild->winSize.extents.y1;
+            local_x = present_window->clipList.extents.x1 - window->firstChild->winSize.extents.x1;
+            local_y = present_window->clipList.extents.y1 - window->firstChild->winSize.extents.y1;
 
             wl_subsurface_set_position(xwl_window->present_subsurface, local_x, local_y);
         }
     }
 
-    Bool created;
-    struct wl_buffer *buffer = xwl_glamor_pixmap_get_wl_buffer(pixmap, &created);
+    buffer = xwl_glamor_pixmap_get_wl_buffer(pixmap, &buffer_created);
 
-//    Bool query_release = TRUE;  //TODOX: other simpler method to test it? -> like std::any_of
-//    xorg_list_for_each_entry(event, &xwl_window->present_event_list, list) {
-//        if (event->buffer == buffer) {
-//            query_release = FALSE;
-//            break;
-//        }
-//    }
-
-        event = malloc(sizeof *event);
-        if (!event) {
-            // TODOX: rewind everything above (or just do flip without buffer release callback?)
-            return FALSE;
-        }
-
-        event->event_id = event_id;
-        event->buffer = buffer;
-        /* make sure only the release callback triggers the event */
-        event->target_msc = 0;
-
-        xorg_list_add(&event->list, &xwl_window->present_event_list);
-
-    if (created) {
-        wl_buffer_add_listener(buffer, &release_listener, xwl_window);
+    event = malloc(sizeof *event);
+    if (!event) {
+        // TODOX: rewind everything above (or just do flip without buffer release callback?)
+        return FALSE;
     }
+
+    event->event_id = event_id;
+    event->buffer = buffer;
+    /* make sure only the release callback triggers the event */
+    event->target_msc = 0;
+
+    xorg_list_add(&event->list, &xwl_window->present_event_list);
+
+    if (buffer_created)
+        wl_buffer_add_listener(buffer, &release_listener, xwl_window);
 
     wl_surface_attach(xwl_window->present_surface, buffer, 0, 0);
 

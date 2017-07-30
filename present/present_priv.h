@@ -144,16 +144,9 @@ typedef struct present_window_priv {
 
     /* Below for rootless mode */
     PixmapPtr               restore_pixmap;
-
     present_vblank_ptr      flip_pending;
+    present_vblank_ptr      flip_active;
     uint64_t                unflip_event_id;
-
-    /* Currently active flipped pixmap and fence */
-    RRCrtcPtr               flip_crtc;
-    uint32_t                flip_serial;
-    PixmapPtr               flip_pixmap;
-    present_fence_ptr       flip_idle_fence;
-    Bool                    flip_sync;
 } present_window_priv_rec, *present_window_priv_ptr;
 
 #define PresentCrtcNeverSet     ((RRCrtcPtr) 1)
