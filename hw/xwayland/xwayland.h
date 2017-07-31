@@ -130,6 +130,8 @@ struct xwl_present_event {
     uint64_t event_id;
     uint64_t target_msc;
 
+    struct xwl_window *xwl_window;
+
     struct wl_buffer *buffer;
 
     struct xorg_list list;
@@ -345,6 +347,8 @@ Bool xwl_screen_init_glamor(struct xwl_screen *xwl_screen,
 struct wl_buffer *xwl_glamor_pixmap_get_wl_buffer(PixmapPtr pixmap, Bool *created);
 
 Bool xwl_present_init(ScreenPtr screen);
+
+void xwl_present_unrealize(WindowPtr window);
 
 void xwl_screen_release_tablet_manager(struct xwl_screen *xwl_screen);
 

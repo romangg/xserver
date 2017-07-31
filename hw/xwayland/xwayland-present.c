@@ -27,6 +27,8 @@
 
 #include <present.h>
 
+static struct xorg_list xwl_present_release;
+
 static void
 xwl_present_check_events(struct xwl_window *xwl_window)
 {
@@ -34,7 +36,7 @@ xwl_present_check_events(struct xwl_window *xwl_window)
     struct xwl_present_event    *event, *tmp;
 
     xorg_list_for_each_entry_safe(event, tmp, &xwl_window->present_event_list, list) {
-        if (0 < event->target_msc && event->target_msc <= msc) {
+        if (event->target_msc <= msc) {
             present_event_notify(event->event_id, 0, msc);
             xorg_list_del(&event->list);
             free(event);
@@ -42,24 +44,45 @@ xwl_present_check_events(struct xwl_window *xwl_window)
     }
 }
 
+void
+xwl_present_unrealize(WindowPtr window)
+{
+    struct xwl_window           *xwl_window = xwl_window_from_window(window);
+    struct xwl_present_event    *event, *tmp;
+
+    if (xwl_window == NULL)
+        return;
+    if (!xwl_window->present_window )
+        return;
+    if (xwl_window->present_window != window)
+        return;
+
+    /* Clear remaining buffer releases */
+    xorg_list_for_each_entry_safe(event, tmp, &xwl_present_release, list) {
+        if (event->xwl_window == xwl_window) {
+            present_event_notify(event->event_id, 0, xwl_window->present_msc);
+            xorg_list_del(&event->list);
+            free(event);
+        }
+    }
+
+    xwl_window->present_window = NULL;
+}
+
 static void
 buffer_release(void *data, struct wl_buffer *buffer)
 {
-    struct xwl_window *xwl_window = data;
+    struct xwl_window           *xwl_window = wl_buffer_get_user_data(buffer);
     struct xwl_present_event    *event, *tmp;
 
-    ErrorF("XX buffer_release 0: %i\n", buffer);
-
-    xorg_list_for_each_entry_safe(event, tmp, &xwl_window->present_event_list, list) {
-        if (event->target_msc == 0 && event->buffer == buffer) {
-            ErrorF("XX buffer_release: %i\n", event->event_id);
+    xorg_list_for_each_entry_safe(event, tmp, &xwl_present_release, list) {
+        if (event->xwl_window == xwl_window && event->buffer == buffer) {
             present_event_notify(event->event_id, 0, xwl_window->present_msc);
             xorg_list_del(&event->list);
             free(event);
             break;
         }
     }
-
 }
 
 static const struct wl_buffer_listener release_listener = {
@@ -71,7 +94,6 @@ present_frame_callback(void *data,
                struct wl_callback *callback,
                uint32_t time)
 {
-//    struct xwl_present_event *event, *tmp;
     struct xwl_window *xwl_window = data;
 
     wl_callback_destroy(xwl_window->present_frame_callback);
@@ -267,24 +289,26 @@ xwl_present_flip(RRCrtcPtr crtc,
         }
     }
 
-    buffer = xwl_glamor_pixmap_get_wl_buffer(pixmap, &buffer_created);
-
     event = malloc(sizeof *event);
     if (!event) {
         // TODOX: rewind everything above (or just do flip without buffer release callback?)
         return FALSE;
     }
 
+    buffer = xwl_glamor_pixmap_get_wl_buffer(pixmap, &buffer_created);
+
     event->event_id = event_id;
+    event->xwl_window = xwl_window;
     event->buffer = buffer;
     /* make sure only the release callback triggers the event */
     event->target_msc = 0;
 
-    xorg_list_add(&event->list, &xwl_window->present_event_list);
+    xorg_list_add(&event->list, &xwl_present_release);
 
     if (buffer_created)
-        wl_buffer_add_listener(buffer, &release_listener, xwl_window);
+        wl_buffer_add_listener(buffer, &release_listener, NULL);
 
+    wl_buffer_set_user_data(buffer, xwl_window);
     wl_surface_attach(xwl_window->present_surface, buffer, 0, 0);
 
     if (!xwl_window->present_frame_callback) {
@@ -340,5 +364,6 @@ static present_screen_info_rec xwl_present_screen_info = {
 Bool
 xwl_present_init(ScreenPtr screen)
 {
+    xorg_list_init(&xwl_present_release);
     return present_screen_init(screen, &xwl_present_screen_info);
 }
