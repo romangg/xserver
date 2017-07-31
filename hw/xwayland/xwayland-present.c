@@ -254,10 +254,10 @@ xwl_present_flip(RRCrtcPtr crtc,
         xwl_window->present_need_configure = FALSE;
         xwl_present_cleanup_surfaces(xwl_window);
 
-        if (RegionNumRects(&window->clipList) == 0 || RegionEqual(&window->clipList, &present_window->winSize)) {
+        if (RegionEqual(&window->winSize, &present_window->winSize)) {
             ErrorF("XX xwl_present_flip MAIN\n");
 
-            /* We can flip directly to the main surface (full screen window) */
+            /* We can flip directly to the main surface (full screen window without clips) */
             xwl_window->present_surface = xwl_window->surface;
         } else {
             ErrorF("XX xwl_present_flip SUB\n");
