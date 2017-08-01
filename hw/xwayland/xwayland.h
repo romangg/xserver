@@ -344,7 +344,7 @@ Bool xwl_glamor_init(struct xwl_screen *xwl_screen);
 
 Bool xwl_screen_init_glamor(struct xwl_screen *xwl_screen,
                          uint32_t id, uint32_t version);
-struct wl_buffer *xwl_glamor_pixmap_get_wl_buffer(PixmapPtr pixmap, Bool *created);
+struct wl_buffer *xwl_glamor_pixmap_get_wl_buffer(PixmapPtr pixmap, unsigned short width, unsigned short height, Bool *created);
 
 Bool xwl_present_init(ScreenPtr screen);
 

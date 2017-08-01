@@ -27,7 +27,7 @@
 
 #include <present.h>
 
-static struct xorg_list xwl_present_release;
+static struct xorg_list xwl_present_release;    //TODOX: integrate into xwl_window struct?
 
 static void
 xwl_present_check_events(struct xwl_window *xwl_window)
@@ -245,10 +245,14 @@ xwl_present_flip(RRCrtcPtr crtc,
     struct xwl_screen           *xwl_screen = xwl_window->xwl_screen;
     WindowPtr                   window = xwl_window->window;
     WindowPtr                   present_window = xwl_window->present_window;
+    BoxPtr                      win_box, present_box;
     Bool                        buffer_created;
-    int32_t                     local_x, local_y;
     struct wl_buffer            *buffer;
     struct xwl_present_event    *event;
+    struct wl_region            *input_region;
+
+    win_box = RegionExtents(&window->winSize);
+    present_box = RegionExtents(&present_window->winSize);
 
     if (xwl_window->present_need_configure) {
         xwl_window->present_need_configure = FALSE;
@@ -262,30 +266,20 @@ xwl_present_flip(RRCrtcPtr crtc,
         } else {
             ErrorF("XX xwl_present_flip SUB\n");
 
-            /* remove this part if we want to reenable sub compositing */
-            xwl_window->present_need_configure = TRUE;
-            return FALSE;
-            /**/
-
-            // TODOX: I fear we need to sub-composite ALL child windows in this case.
-            RegionPrint(&window->clipList);
-            RegionPrint(&present_window->clipList);
-
             xwl_window->present_surface =  wl_compositor_create_surface(xwl_window->xwl_screen->compositor);
             wl_surface_set_user_data(xwl_window->present_surface, xwl_window);
 
             xwl_window->present_subsurface =
                     wl_subcompositor_get_subsurface(xwl_screen->subcompositor, xwl_window->present_surface, xwl_window->surface);
-
             wl_subsurface_set_desync(xwl_window->present_subsurface);
 
-            /* We calculate relative to 'firstChild', because 'xwl_window'
-             * includes additionally to the pure wl_surface the window border.
-             */
-            local_x = present_window->clipList.extents.x1 - window->firstChild->winSize.extents.x1;
-            local_y = present_window->clipList.extents.y1 - window->firstChild->winSize.extents.y1;
+            input_region = wl_compositor_create_region(xwl_screen->compositor);
+            wl_surface_set_input_region(xwl_window->present_surface, input_region);
+            wl_region_destroy(input_region);
 
-            wl_subsurface_set_position(xwl_window->present_subsurface, local_x, local_y);
+            wl_subsurface_set_position(xwl_window->present_subsurface,
+                                       present_box->x1 - win_box->x1,
+                                       present_box->y1 - win_box->y1);
         }
     }
 
@@ -295,13 +289,14 @@ xwl_present_flip(RRCrtcPtr crtc,
         return FALSE;
     }
 
-    buffer = xwl_glamor_pixmap_get_wl_buffer(pixmap, &buffer_created);
+    buffer = xwl_glamor_pixmap_get_wl_buffer(pixmap,
+                                             present_box->x2 - present_box->x1,
+                                             present_box->y2 - present_box->y1,
+                                             &buffer_created);
 
     event->event_id = event_id;
     event->xwl_window = xwl_window;
     event->buffer = buffer;
-    /* make sure only the release callback triggers the event */
-    event->target_msc = 0;
 
     xorg_list_add(&event->list, &xwl_present_release);
 
