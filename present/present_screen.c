@@ -105,6 +105,7 @@ present_clear_window_flip(WindowPtr window)
             present_set_abort_flip_rootless(window);
             flip_pending->window = NULL;
         }
+        /* we clear the active flip in free_window_vblank_idle */
         if (window_priv->restore_pixmap)
             present_restore_window_pixmap_only(window);
     } else {

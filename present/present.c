@@ -321,7 +321,7 @@ present_window_to_crtc_msc(WindowPtr window, RRCrtcPtr crtc, uint64_t window_msc
     if (crtc != window_priv->crtc) {
         uint64_t        old_ust, old_msc;
 
-        if (window_priv->crtc == PresentCrtcNeverSet) {
+        if (window_priv->crtc == PresentCrtcNeverSet || window_priv->crtc == NULL) {
             window_priv->msc_offset = 0;
         } else {
             /* The old CRTC may have been turned off, in which case
@@ -426,6 +426,10 @@ present_flip_idle_rootless_active(WindowPtr window)
         present_flip_idle_rootless_vblank(window_priv->flip_active);
         window_priv->flip_active = NULL;
     }
+    /* if we lose the active flip, the flipping window could be reparented and the DDX
+     * delete the crtc
+     */
+    window_priv->crtc = NULL;
 }
 
 struct pixmap_visit {
@@ -574,6 +578,7 @@ present_free_window_vblank_idle(WindowPtr window)
         /* Deletes it from this list as well. */
         present_flip_idle_rootless_vblank(vblank);
     }
+    present_flip_idle_rootless_active(window_priv->window);
 }
 
 static void
@@ -585,8 +590,8 @@ present_unflip_rootless(WindowPtr window)
     assert (!window_priv->unflip_event_id);
     assert (!window_priv->flip_pending);
 
-    present_free_window_vblank_idle(window);
     present_restore_window_pixmap_only(window);
+    present_free_window_vblank_idle(window);
 
     window_priv->unflip_event_id = ++present_event_id;
     DebugPresent(("u %lld\n", window_priv->unflip_event_id));
@@ -748,12 +753,11 @@ present_check_flip_window (WindowPtr window)
         flip_active = window_priv->flip_active;
 
         if (flip_pending) {
-            if (!present_check_flip(flip_pending->crtc, window, flip_pending->pixmap,
+            if (!present_check_flip(flip_pending->crtc, flip_pending->window, flip_pending->pixmap,
                                     flip_pending->sync_flip, NULL, 0, 0))
                 present_set_abort_flip_rootless(window);
         } else if (flip_active) {
-
-            if (!present_check_flip(flip_active->crtc, window, flip_active->pixmap, flip_active->sync_flip, NULL, 0, 0))
+            if (!present_check_flip(flip_active->crtc, flip_active->window, flip_active->pixmap, flip_active->sync_flip, NULL, 0, 0))
                 present_unflip_rootless(window);
         }
     } else {
@@ -1268,7 +1272,6 @@ present_flips_destroy(ScreenPtr screen)
 
             /* Drop reference to any pending flip or unflip pixmaps. */
             present_free_window_vblank_idle(window_priv->window);
-            present_flip_idle_rootless_active(window_priv->window);
         }
     } else {
         /* Reset window pixmaps back to the screen pixmap */
