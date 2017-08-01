@@ -410,6 +410,10 @@ present_flip_idle_rootless_vblank(present_vblank_ptr vblank)
 
     ErrorF("PP present_flip_idle_rootless_vblank 2: %i\n", vblank->event_id);
 
+    /* Don't destroy these objects in the subsequent vblank destruction. */
+    vblank->pixmap = NULL;
+    vblank->idle_fence = NULL;
+
     present_vblank_destroy(vblank);
 }
 
