@@ -166,7 +166,9 @@ xwl_present_check_flip(RRCrtcPtr crtc,
 #ifndef COMPOSITE
     return FALSE;
 #endif
-    struct xwl_window *xwl_window = crtc->devPrivate;
+    /* we can't take crtc->devPrivate because window might have been reparented and
+     * the former parent xwl_window destroyed */
+    struct xwl_window *xwl_window = xwl_window_from_window(window);
 
     if (!xwl_window)
         return FALSE;
