@@ -105,7 +105,7 @@ static DevPrivateKeyRec xwl_window_private_key;
 static DevPrivateKeyRec xwl_screen_private_key;
 static DevPrivateKeyRec xwl_pixmap_private_key;
 
-static struct xwl_window *
+struct xwl_window *
 xwl_window_get(WindowPtr window)
 {
     return dixLookupPrivate(&window->devPrivates, &xwl_window_private_key);
@@ -196,7 +196,7 @@ xwl_property_callback(CallbackListPtr *pcbl, void *closure,
         return;
 
     xwl_window = xwl_window_get(rec->win);
-    if (!xwl_window)
+    if (!xwl_window || rec->win != xwl_window->window)
         return;
 
     xwl_screen = xwl_screen_get(screen);
@@ -234,7 +234,7 @@ xwl_close_screen(ScreenPtr screen)
     return screen->CloseScreen(screen);
 }
 
-struct xwl_window *
+static struct xwl_window *
 xwl_window_from_window(WindowPtr window)
 {
     struct xwl_window *xwl_window;
@@ -274,7 +274,7 @@ xwl_cursor_warped_to(DeviceIntPtr device,
     if (!xwl_seat)
         xwl_seat = xwl_screen_get_default_seat(xwl_screen);
 
-    xwl_window = xwl_window_from_window(window);
+    xwl_window = xwl_window_get(window);
     if (!xwl_window && xwl_seat->focus_window) {
         focus = xwl_seat->focus_window->window;
 
@@ -317,7 +317,7 @@ xwl_cursor_confined_to(DeviceIntPtr device,
         return;
     }
 
-    xwl_window = xwl_window_from_window(window);
+    xwl_window = xwl_window_get(window);
     if (!xwl_window && xwl_seat->focus_window) {
         /* Allow confining on InputOnly windows, but only if the geometry
          * is the same than the focus window.
@@ -433,7 +433,7 @@ xwl_realize_window(WindowPtr window)
     struct xwl_screen *xwl_screen;
     struct xwl_window *xwl_window;
     struct wl_region *region;
-    Bool ret;
+    Bool ret, create_xwl_window;
 
     xwl_screen = xwl_screen_get(screen);
 
@@ -450,13 +450,20 @@ xwl_realize_window(WindowPtr window)
         RegionNull(&window->borderClip);
     }
 
+    create_xwl_window = TRUE;
+
     if (xwl_screen->rootless) {
         if (window->redirectDraw != RedirectDrawManual)
-            return ret;
+            create_xwl_window = FALSE;
     }
     else {
         if (window->parent)
-            return ret;
+            create_xwl_window = FALSE;
+    }
+
+    if (!create_xwl_window) {
+        dixSetPrivate(&window->devPrivates, &xwl_window_private_key, xwl_window_from_window(window));
+        return ret;
     }
 
     xwl_window = calloc(1, sizeof *xwl_window);
@@ -571,8 +578,10 @@ xwl_unrealize_window(WindowPtr window)
     screen->UnrealizeWindow = xwl_unrealize_window;
 
     xwl_window = xwl_window_get(window);
-    if (!xwl_window)
+    if (!xwl_window || xwl_window->window != window) {
+        dixSetPrivate(&window->devPrivates, &xwl_window_private_key, NULL);
         return ret;
+    }
 
     wl_surface_destroy(xwl_window->surface);
     if (RegionNotEmpty(DamageRegion(xwl_window->damage)))

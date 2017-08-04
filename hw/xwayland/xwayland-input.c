@@ -1068,7 +1068,7 @@ xwl_keyboard_activate_grab(DeviceIntPtr device, GrabPtr grab, TimeStamp time, Bo
         if (xwl_seat == NULL)
             xwl_seat = find_matching_seat(device);
         if (xwl_seat)
-            set_grab(xwl_seat, xwl_window_from_window(grab->window));
+            set_grab(xwl_seat, xwl_window_get(grab->window));
     }
 
     ActivateKeyboardGrab(device, grab, time, passive);
