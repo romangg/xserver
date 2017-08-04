@@ -153,14 +153,20 @@ xwl_glamor_create_pixmap_for_bo(ScreenPtr screen, struct gbm_bo *bo, int depth)
 }
 
 struct wl_buffer *
-xwl_glamor_pixmap_get_wl_buffer(PixmapPtr pixmap)
+xwl_glamor_pixmap_get_wl_buffer(PixmapPtr pixmap, unsigned short width, unsigned short height, Bool *created)
 {
     struct xwl_screen *xwl_screen = xwl_screen_get(pixmap->drawable.pScreen);
     struct xwl_pixmap *xwl_pixmap = xwl_pixmap_get(pixmap);
     int prime_fd;
 
-    if (xwl_pixmap->buffer)
+    if (xwl_pixmap->buffer) {
+        if(created)
+            *created = FALSE;
         return xwl_pixmap->buffer;
+    }
+
+    if(created)
+        *created = TRUE;
 
     prime_fd = gbm_bo_get_fd(xwl_pixmap->bo);
     if (prime_fd == -1)
@@ -168,8 +174,8 @@ xwl_glamor_pixmap_get_wl_buffer(PixmapPtr pixmap)
 
     xwl_pixmap->buffer =
         wl_drm_create_prime_buffer(xwl_screen->drm, prime_fd,
-                                   pixmap->drawable.width,
-                                   pixmap->drawable.height,
+                                   width,
+                                   height,
                                    drm_format_for_depth(pixmap->drawable.depth),
                                    0, gbm_bo_get_stride(xwl_pixmap->bo),
                                    0, 0,

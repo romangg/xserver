@@ -562,6 +562,9 @@ xwl_unrealize_window(WindowPtr window)
         xwl_seat_clear_touch(xwl_seat, window);
     }
 
+    /* We do this always (in case we were presenting a child window) */
+    xwl_present_unrealize(window);
+
     screen->UnrealizeWindow = xwl_screen->UnrealizeWindow;
     ret = (*screen->UnrealizeWindow) (window);
     xwl_screen->UnrealizeWindow = screen->UnrealizeWindow;
@@ -582,7 +585,7 @@ xwl_unrealize_window(WindowPtr window)
     if (xwl_window->present_frame_callback)
         wl_callback_destroy(xwl_window->present_frame_callback);
 
-    /* Clean up remaining events */
+    /* Clear remaining present events */
     xorg_list_for_each_entry_safe(event, tmp, &xwl_window->present_event_list, list) {
         xorg_list_del(&event->list);
         free(event);
@@ -634,7 +637,7 @@ xwl_window_post_damage(struct xwl_window *xwl_window)
 
 #ifdef GLAMOR_HAS_GBM
     if (xwl_screen->glamor)
-        buffer = xwl_glamor_pixmap_get_wl_buffer(pixmap);
+        buffer = xwl_glamor_pixmap_get_wl_buffer(pixmap, pixmap->drawable.width, pixmap->drawable.height, NULL);
     else
 #endif
         buffer = xwl_shm_pixmap_get_wl_buffer(pixmap);

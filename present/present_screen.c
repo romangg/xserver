@@ -47,6 +47,7 @@ present_get_window_priv(WindowPtr window, Bool create)
         return NULL;
     xorg_list_append(&window_priv->screen_list, &screen_priv->windows);
     xorg_list_init(&window_priv->vblank);
+    xorg_list_init(&window_priv->idle_vblank);
     xorg_list_init(&window_priv->notifies);
     window_priv->window = window;
     window_priv->crtc = PresentCrtcNeverSet;
@@ -104,6 +105,7 @@ present_clear_window_flip(WindowPtr window)
             present_set_abort_flip_rootless(window);
             flip_pending->window = NULL;
         }
+        /* we clear the active flip in free_window_vblank_idle */
         if (window_priv->restore_pixmap)
             present_restore_window_pixmap_only(window);
     } else {
@@ -136,6 +138,8 @@ present_destroy_window(WindowPtr window)
         present_free_events(window);
         present_free_window_vblank(window);
         present_clear_window_flip(window);
+        present_free_window_vblank_idle(window);
+
         xorg_list_del(&window_priv->screen_list);
         free(window_priv);
     }

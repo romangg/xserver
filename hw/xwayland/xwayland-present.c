@@ -27,17 +27,7 @@
 
 #include <present.h>
 
-static void
-buffer_release(void *data, struct wl_buffer *buffer)
-{
-    struct xwl_present_event *event = data;
-
-    //TODOX: how to translate this in Present extension?
-}
-
-static const struct wl_buffer_listener release_listener = {
-    buffer_release
-};
+static struct xorg_list xwl_present_release;    //TODOX: integrate into xwl_window struct?
 
 static void
 xwl_present_check_events(struct xwl_window *xwl_window)
@@ -54,12 +44,56 @@ xwl_present_check_events(struct xwl_window *xwl_window)
     }
 }
 
+void
+xwl_present_unrealize(WindowPtr window)
+{
+    struct xwl_window           *xwl_window = xwl_window_from_window(window);
+    struct xwl_present_event    *event, *tmp;
+
+    if (xwl_window == NULL)
+        return;
+    if (!xwl_window->present_window )
+        return;
+    if (xwl_window->present_window != window)
+        return;
+
+    /* Clear remaining buffer releases */
+    xorg_list_for_each_entry_safe(event, tmp, &xwl_present_release, list) {
+        if (event->xwl_window == xwl_window) {
+            present_event_notify(event->event_id, 0, xwl_window->present_msc);
+            xorg_list_del(&event->list);
+            free(event);
+        }
+    }
+
+    xwl_window->present_window = NULL;
+}
+
+static void
+buffer_release(void *data, struct wl_buffer *buffer)
+{
+    struct xwl_window           *xwl_window = wl_buffer_get_user_data(buffer);
+    struct xwl_present_event    *event, *tmp;
+
+    xorg_list_for_each_entry_safe(event, tmp, &xwl_present_release, list) {
+        if (event->xwl_window == xwl_window && event->buffer == buffer) {
+            present_event_notify(event->event_id, 0, xwl_window->present_msc);
+            xorg_list_del(&event->list);
+            free(event);
+            break;
+        }
+    }
+}
+
+static const struct wl_buffer_listener release_listener = {
+    buffer_release
+};
+
 static void
 present_frame_callback(void *data,
                struct wl_callback *callback,
                uint32_t time)
 {
-//    struct xwl_present_event *event, *tmp;
     struct xwl_window *xwl_window = data;
 
     wl_callback_destroy(xwl_window->present_frame_callback);
@@ -105,6 +139,9 @@ xwl_present_queue_vblank(RRCrtcPtr crtc,
                         uint64_t event_id,
                         uint64_t msc)
 {
+    struct xwl_window *xwl_window = crtc->devPrivate;
+    struct xwl_present_event *event;
+
     /*
      * Queuing events doesn't work yet: There needs to be a Wayland protocol
      * extension infroming clients about timings.
@@ -115,9 +152,6 @@ xwl_present_queue_vblank(RRCrtcPtr crtc,
      */
     return BadRequest;
     /* */
-
-    struct xwl_window *xwl_window = crtc->devPrivate;
-    struct xwl_present_event *event;
 
     event = malloc(sizeof *event);
     if (!event)
@@ -209,11 +243,18 @@ xwl_present_flip(RRCrtcPtr crtc,
                 PixmapPtr pixmap,
                 Bool sync_flip)
 {
-    struct xwl_window   *xwl_window = crtc->devPrivate;
-    struct xwl_screen   *xwl_screen = xwl_window->xwl_screen;
-    ScreenPtr           screen = xwl_screen->screen;
-    WindowPtr           window = xwl_window->window;
-    WindowPtr           present_window = xwl_window->present_window;
+    struct xwl_window           *xwl_window = crtc->devPrivate;
+    struct xwl_screen           *xwl_screen = xwl_window->xwl_screen;
+    WindowPtr                   window = xwl_window->window;
+    WindowPtr                   present_window = xwl_window->present_window;
+    BoxPtr                      win_box, present_box;
+    Bool                        buffer_created;
+    struct wl_buffer            *buffer;
+    struct xwl_present_event    *event;
+    struct wl_region            *input_region;
+
+    win_box = RegionExtents(&window->winSize);
+    present_box = RegionExtents(&present_window->winSize);
 
     if (xwl_window->present_need_configure) {
         xwl_window->present_need_configure = FALSE;
@@ -227,44 +268,50 @@ xwl_present_flip(RRCrtcPtr crtc,
         } else {
             ErrorF("XX xwl_present_flip SUB\n");
 
-            /* remove this part if we want to reenable sub compositing */
-            xwl_window->present_need_configure = TRUE;
-            return FALSE;
-            /**/
-
-            // TODOX: I fear we need to sub-composite ALL child windows in this case.
-            ErrorF("XX xwl_present_flip SUB\n");
-            RegionPrint(&window->clipList);
-            RegionPrint(&present_window->clipList);
-
             xwl_window->present_surface =  wl_compositor_create_surface(xwl_window->xwl_screen->compositor);
             wl_surface_set_user_data(xwl_window->present_surface, xwl_window);
 
             xwl_window->present_subsurface =
                     wl_subcompositor_get_subsurface(xwl_screen->subcompositor, xwl_window->present_surface, xwl_window->surface);
-
             wl_subsurface_set_desync(xwl_window->present_subsurface);
 
-            /* We calculate relative to 'firstChild', because 'xwl_window'
-             * includes additionally to the pure wl_surface the window border.
-             */
-            int32_t local_x = present_window->clipList.extents.x1 - window->firstChild->winSize.extents.x1;
-            int32_t local_y = present_window->clipList.extents.y1 - window->firstChild->winSize.extents.y1;
+            input_region = wl_compositor_create_region(xwl_screen->compositor);
+            wl_surface_set_input_region(xwl_window->present_surface, input_region);
+            wl_region_destroy(input_region);
 
-            wl_subsurface_set_position(xwl_window->present_subsurface, local_x, local_y);
+            wl_subsurface_set_position(xwl_window->present_subsurface,
+                                       present_box->x1 - win_box->x1,
+                                       present_box->y1 - win_box->y1);
         }
     }
 
-    struct wl_buffer *buffer = xwl_glamor_pixmap_get_wl_buffer(pixmap);
+    event = malloc(sizeof *event);
+    if (!event) {
+        // TODOX: rewind everything above (or just do flip without buffer release callback?)
+        return FALSE;
+    }
+
+    buffer = xwl_glamor_pixmap_get_wl_buffer(pixmap,
+                                             present_box->x2 - present_box->x1,
+                                             present_box->y2 - present_box->y1,
+                                             &buffer_created);
+
+    event->event_id = event_id;
+    event->xwl_window = xwl_window;
+    event->buffer = buffer;
+
+    xorg_list_add(&event->list, &xwl_present_release);
+
+    if (buffer_created)
+        wl_buffer_add_listener(buffer, &release_listener, NULL);
+
+    wl_buffer_set_user_data(buffer, xwl_window);
     wl_surface_attach(xwl_window->present_surface, buffer, 0, 0);
 
     if (!xwl_window->present_frame_callback) {
         xwl_window->present_frame_callback = wl_surface_frame(xwl_window->present_surface);
         wl_callback_add_listener(xwl_window->present_frame_callback, &present_frame_listener, xwl_window);
     }
-
-//    wl_buffer_add_listener(buffer, &release_listener, event); //TODOX: if we can use it, we need make sure this only happens once per wl_buffer/Pixmap
-//    wl_surface_commit(xwl_window->present_surface);
 
     return TRUE;
 }
@@ -314,5 +361,6 @@ static present_screen_info_rec xwl_present_screen_info = {
 Bool
 xwl_present_init(ScreenPtr screen)
 {
+    xorg_list_init(&xwl_present_release);
     return present_screen_init(screen, &xwl_present_screen_info);
 }

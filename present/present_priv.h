@@ -139,20 +139,14 @@ typedef struct present_window_priv {
     uint64_t               msc_offset;
     uint64_t               msc;         /* Last reported MSC from the current crtc */
     struct xorg_list       vblank;
+    struct xorg_list       idle_vblank;
     struct xorg_list       notifies;
 
     /* Below for rootless mode */
     PixmapPtr               restore_pixmap;
-
     present_vblank_ptr      flip_pending;
+    present_vblank_ptr      flip_active;
     uint64_t                unflip_event_id;
-
-    /* Currently active flipped pixmap and fence */
-    RRCrtcPtr               flip_crtc;
-    uint32_t                flip_serial;
-    PixmapPtr               flip_pixmap;
-    present_fence_ptr       flip_idle_fence;
-    Bool                    flip_sync;
 } present_window_priv_rec, *present_window_priv_ptr;
 
 #define PresentCrtcNeverSet     ((RRCrtcPtr) 1)
@@ -219,6 +213,9 @@ present_set_abort_flip_rootless(WindowPtr window);
 
 void
 present_check_flip_window(WindowPtr window);
+
+void
+present_free_window_vblank_idle(WindowPtr window);
 
 RRCrtcPtr
 present_get_crtc(WindowPtr window);
