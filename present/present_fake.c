@@ -158,7 +158,7 @@ present_fake_screen_init(ScreenPtr screen)
      *
      * Otherwise, pretend that the screen runs at 60Hz
      */
-    if ((screen_priv->info && screen_priv->info->get_crtc) || screen_priv->winmode_info)
+    if ((screen_priv->info && screen_priv->info->get_crtc) || (screen_priv->winmode_info && screen_priv->winmode_info->get_crtc))
         screen_priv->fake_interval = 1000000;
     else
         screen_priv->fake_interval = 16667;
