@@ -467,7 +467,7 @@ present_scrmode_execute(present_vblank_ptr vblank, uint64_t ust, uint64_t crtc_m
             /* Try to flip
              */
 
-            if (present_flip(vblank->crtc, vblank->event_id, vblank->target_msc, vblank->pixmap, vblank->sync_flip)) {
+            if (present_scrmode_flip(vblank->crtc, vblank->event_id, vblank->target_msc, vblank->pixmap, vblank->sync_flip)) {
                 /* Fix window pixmaps:
                  *  1) Restore previous flip window pixmap
                  *  2) Set current flip window pixmap to the new pixmap
