@@ -701,8 +701,6 @@ present_scrmode_abort_vblank(ScreenPtr screen, void* target, uint64_t event_id, 
     RRCrtcPtr crtc = target;
     present_vblank_ptr  vblank;
 
-    // TODOX: branch this into modes. maybe already in present_free_window_vblank
-
     if (crtc == NULL)
         present_fake_abort_vblank(screen, event_id, msc);
     else

@@ -385,7 +385,7 @@ present_create_vblank(present_window_priv_ptr window_priv,
 
     vblank->x_off = x_off;
     vblank->y_off = y_off;
-    vblank->target_msc = target_msc;
+    vblank->target_msc = *target_msc;
     vblank->crtc = target_crtc;
     vblank->msc_offset = window_priv->msc_offset;
     vblank->notifies = notifies;
@@ -394,12 +394,12 @@ present_create_vblank(present_window_priv_ptr window_priv,
     if (pixmap != NULL &&
         !(options & PresentOptionCopy) &&
         screen_priv->info) {
-        if (msc_is_after(target_msc, crtc_msc) &&
+        if (msc_is_after(*target_msc, crtc_msc) &&
             screen_priv->check_flip (target_crtc, window, pixmap, TRUE, valid, x_off, y_off))
         {
             vblank->flip = TRUE;
             vblank->sync_flip = TRUE;
-            target_msc--;
+            *target_msc = *target_msc - 1;
         } else if ((screen_priv->info->capabilities & PresentCapabilityAsync) &&
             screen_priv->check_flip (target_crtc, window, pixmap, FALSE, valid, x_off, y_off))
         {
@@ -421,7 +421,7 @@ present_create_vblank(present_window_priv_ptr window_priv,
 
     if (pixmap)
         DebugPresent(("q %lld %p %8lld: %08lx -> %08lx (crtc %p) flip %d vsync %d serial %d\n",
-                      vblank->event_id, vblank, target_msc,
+                      vblank->event_id, vblank, *target_msc,
                       vblank->pixmap->drawable.id, vblank->window->drawable.id,
                       target_crtc, vblank->flip, vblank->sync_flip, vblank->serial));
 

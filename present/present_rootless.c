@@ -628,3 +628,38 @@ present_rootless_flips_destroy(ScreenPtr screen)
         present_rootless_free_idle_vblanks(window_priv->window);
     }
 }
+
+static void
+present_rootless_abort_vblank(ScreenPtr screen, void* target, uint64_t event_id, uint64_t msc)
+{
+    WindowPtr               window = target;
+    present_window_priv_ptr window_priv = present_window_priv(window);
+    present_vblank_ptr      vblank;
+
+//    if (window == NULL)
+//        present_fake_abort_vblank(screen, event_id, msc);
+//    else
+//    {
+        present_screen_priv_ptr     screen_priv = present_screen_priv(screen);
+
+        (*screen_priv->rootless_info->abort_vblank) (window, event_id, msc);
+//    }
+
+    xorg_list_for_each_entry(vblank, &window_priv->exec_queue, event_queue) {
+        int64_t match = event_id - vblank->event_id;
+        if (match == 0) {
+            xorg_list_del(&vblank->event_queue);
+            vblank->queued = FALSE;
+            return;
+        }
+        if (match < 0)
+            break;
+    }
+    xorg_list_for_each_entry(vblank, &window_priv->flip_queue, event_queue) {
+        if (vblank->event_id == event_id) {
+            xorg_list_del(&vblank->event_queue);
+            vblank->queued = FALSE;
+            return;
+        }
+    }
+}

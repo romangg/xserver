@@ -273,9 +273,6 @@ present_notify_msc(WindowPtr window,
                    uint64_t divisor,
                    uint64_t remainder);
 
-//void
-//present_abort_vblank(ScreenPtr screen, RRCrtcPtr crtc, uint64_t event_id, uint64_t msc);
-
 void
 present_vblank_destroy(present_vblank_ptr vblank);
 

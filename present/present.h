@@ -56,6 +56,8 @@ typedef Bool (*present_queue_vblank_rootless_ptr) (WindowPtr window,
  */
 typedef void (*present_abort_vblank_ptr) (RRCrtcPtr crtc, uint64_t event_id, uint64_t msc);
 
+typedef void (*present_abort_vblank_rootless_ptr) (WindowPtr window, uint64_t event_id, uint64_t msc);
+
 /* Flush pending drawing on 'window' to the hardware.
  */
 typedef void (*present_flush_ptr) (WindowPtr window);
@@ -137,8 +139,8 @@ typedef struct present_rootless_screen_info {
 
     present_get_crtc_ptr                get_crtc;
     present_get_ust_msc_rootless_ptr    get_ust_msc;
-    present_queue_vblank_rootless_ptr            queue_vblank;
-    present_abort_vblank_ptr            abort_vblank;
+    present_queue_vblank_rootless_ptr   queue_vblank;
+    present_abort_vblank_rootless_ptr   abort_vblank;
     present_flush_ptr                   flush;
     uint32_t                            capabilities;
     present_check_flip_ptr              check_flip;
