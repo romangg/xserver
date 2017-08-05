@@ -74,6 +74,15 @@ present_rootless_re_execute(present_vblank_ptr vblank)
 }
 
 static void
+present_rootless_flush(WindowPtr window)
+{
+    ScreenPtr                   screen = window->drawable.pScreen;
+    present_screen_priv_ptr     screen_priv = present_screen_priv(screen);
+
+    (*screen_priv->rootless_info->flush) (window);
+}
+
+static void
 present_rootless_flip_try_ready(WindowPtr window)
 {
     present_window_priv_ptr window_priv = present_window_priv(window);

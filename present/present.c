@@ -145,21 +145,6 @@ present_query_capabilities(RRCrtcPtr crtc)
     return screen_priv->query_capabilities(screen_priv);
 }
 
-static void
-present_flush(WindowPtr window)
-{
-    ScreenPtr                   screen = window->drawable.pScreen;
-    present_screen_priv_ptr     screen_priv = present_screen_priv(screen);
-
-    if (!screen_priv)
-        return;
-
-    if (!screen_priv->info)
-        return;
-
-    (*screen_priv->info->flush) (window);
-}
-
 struct pixmap_visit {
     PixmapPtr   old;
     PixmapPtr   new;
@@ -261,7 +246,7 @@ present_execute_flip_recover(present_vblank_ptr vblank, uint64_t crtc_msc)
      * which is then freed, freeing the region
      */
     vblank->update = NULL;
-    present_flush(window);
+    screen_priv->flush(window);
 
     present_pixmap_idle(vblank->pixmap, vblank->window, vblank->serial, vblank->idle_fence);
 }

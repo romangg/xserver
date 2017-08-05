@@ -132,6 +132,21 @@ present_scrmode_check_flip(RRCrtcPtr    crtc,
     return TRUE;
 }
 
+static void
+present_scrmode_flush(WindowPtr window)
+{
+    ScreenPtr                   screen = window->drawable.pScreen;
+    present_screen_priv_ptr     screen_priv = present_screen_priv(screen);
+
+    if (!screen_priv)
+        return;
+
+    if (!screen_priv->info)
+        return;
+
+    (*screen_priv->info->flush) (window);
+}
+
 static RRCrtcPtr
 present_scrmode_get_crtc(present_screen_priv_ptr screen_priv, WindowPtr window)
 {
