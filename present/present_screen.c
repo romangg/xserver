@@ -99,11 +99,11 @@ present_clear_window_flip(WindowPtr window)
     flip_pending = screen_priv->flip_pending;
 
     if (flip_pending && flip_pending->window == window) {
-        present_scrmd_set_abort_flip(screen);
+        present_scrmode_set_abort_flip(screen);
         flip_pending->window = NULL;
     }
     if (screen_priv->flip_window == window) {
-        present_scrmd_restore_screen_pixmap(screen);
+        present_scrmode_restore_screen_pixmap(screen);
         screen_priv->flip_window = NULL;
     }
 }
@@ -243,7 +243,7 @@ present_screen_init(ScreenPtr screen, present_screen_info_ptr info)
             return FALSE;
 
         screen_priv->info = info;
-        screen_priv->present_pixmap = &present_scrmd_pixmap;
+        screen_priv->present_pixmap = &present_scrmode_pixmap;
 
         present_fake_screen_init(screen);
     }

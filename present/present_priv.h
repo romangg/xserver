@@ -122,7 +122,7 @@ typedef struct present_window_priv {
     uint64_t                unflip_event_id;
 } present_window_priv_rec, *present_window_priv_ptr;
 
-typedef int (*present_priv_present_pixmap_ptr) (present_window_priv_ptr window,
+typedef int (*present_priv_pixmap_ptr) (present_window_priv_ptr window,
                                    PixmapPtr pixmap,
                                    CARD32 serial,
                                    RegionPtr valid,
@@ -185,7 +185,7 @@ struct present_screen_priv {
     /* internal fct pointer */
     present_priv_check_flip_window_ptr  check_flip_window;
     present_priv_create_event_id_ptr    create_event_id;
-    present_priv_present_pixmap_ptr     present_pixmap;
+    present_priv_pixmap_ptr             present_pixmap;
     present_priv_flips_destroy_ptr      flips_destroy;
     present_priv_re_execute_ptr         re_execute;
     present_priv_queue_vblank_ptr       queue_vblank;
@@ -247,7 +247,7 @@ present_pixmap(WindowPtr window,
                    int num_notifies);
 
 int
-present_scrmd_pixmap(present_window_priv_ptr window_priv,
+present_scrmode_pixmap(present_window_priv_ptr window_priv,
                    PixmapPtr pixmap,
                    CARD32 serial,
                    RegionPtr valid,
@@ -281,13 +281,13 @@ void
 present_flips_destroy(ScreenPtr screen);
 
 void
-present_scrmd_restore_screen_pixmap(ScreenPtr screen);  // TODOX: as fct ptr in screen_priv instead?
+present_scrmode_restore_screen_pixmap(ScreenPtr screen);  // TODOX: as fct ptr in screen_priv instead?
 
 void
 present_rootless_restore_window_pixmap(WindowPtr window);   //
 
 void
-present_scrmd_set_abort_flip(ScreenPtr screen);
+present_scrmode_set_abort_flip(ScreenPtr screen);
 
 void
 present_rootless_set_abort_flip(WindowPtr window);
