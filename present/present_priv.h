@@ -307,7 +307,7 @@ uint32_t
 present_query_capabilities(RRCrtcPtr crtc);
 
 Bool
-present_init(void);
+present_scrmode_init(void);
 
 present_vblank_ptr
 present_create_vblank(present_window_priv_ptr window_priv,

@@ -32,18 +32,6 @@
 #include <time.h>
 #endif
 
-//static uint64_t         present_event_id;
-//static struct xorg_list present_exec_queue;
-//static struct xorg_list present_flip_queue;
-
-//static struct xorg_list present_idle_queue;
-
-//#if 0
-//#define DebugPresent(x) ErrorF x
-//#else
-//#define DebugPresent(x)
-//#endif
-
 /*
  * Returns:
  * TRUE if the first MSC value is after the second one
@@ -612,16 +600,4 @@ present_vblank_destroy(present_vblank_ptr vblank)
         present_destroy_notifies(vblank->notifies, vblank->num_notifies);
 
     free(vblank);
-}
-
-Bool
-present_init(void)
-{
-    // TODOX: dont do this in rootless mode?
-
-//    xorg_list_init(&present_exec_queue);
-//    xorg_list_init(&present_flip_queue);
-////    xorg_list_init(&present_idle_queue);
-//    present_fake_queue_init();
-    return TRUE;
 }
