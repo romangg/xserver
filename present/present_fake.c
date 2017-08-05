@@ -126,9 +126,11 @@ present_fake_screen_init(ScreenPtr screen)
      * will be used for off-screen windows and while screens are blanked,
      * in which case we want a slow interval here
      *
+     * In rootless mode we always expect the backend to have vblank support.
+     *
      * Otherwise, pretend that the screen runs at 60Hz
      */
-    if (screen_priv->info && screen_priv->info->get_crtc)
+    if (screen_priv->info && screen_priv->info->get_crtc || screen_priv->rootless_info)
         screen_priv->fake_interval = 1000000;
     else
         screen_priv->fake_interval = 16667;

@@ -96,30 +96,34 @@ present_clear_window_flip(WindowPtr window)
     present_screen_priv_ptr     screen_priv = present_screen_priv(screen);
     present_vblank_ptr          flip_pending;
 
-    if (screen_priv->rootless) {
-        present_window_priv_ptr window_priv = present_window_priv(window);
+    flip_pending = screen_priv->flip_pending;
 
-        flip_pending = window_priv->flip_pending;
-
-        if (flip_pending) {
-            present_set_abort_flip_rootless(window);
-            flip_pending->window = NULL;
-        }
-        /* we clear the active flip in free_window_vblank_idle */
-        if (window_priv->restore_pixmap)
-            present_restore_window_pixmap_only(window);
-    } else {
-        flip_pending = screen_priv->flip_pending;
-
-        if (flip_pending && flip_pending->window == window) {
-            present_set_abort_flip(screen);
-            flip_pending->window = NULL;
-        }
-        if (screen_priv->flip_window == window) {
-            present_restore_screen_pixmap(screen);
-            screen_priv->flip_window = NULL;
-        }
+    if (flip_pending && flip_pending->window == window) {
+        present_set_abort_flip(screen);
+        flip_pending->window = NULL;
     }
+    if (screen_priv->flip_window == window) {
+        present_restore_screen_pixmap(screen);
+        screen_priv->flip_window = NULL;
+    }
+}
+
+static void
+present_clear_window_flip_rootless(WindowPtr window)
+{
+    present_vblank_ptr          flip_pending;
+    present_window_priv_ptr window_priv = present_window_priv(window);
+
+    flip_pending = window_priv->flip_pending;
+
+    if (flip_pending) {
+        present_rootless_set_abort_flip(window);
+        flip_pending->window = NULL;
+    }
+    /* we clear the active flip in free_window_vblank_idle */
+    if (window_priv->restore_pixmap)
+        present_restore_window_pixmap_only(window);
+    present_rootless_free_idle_vblanks(window);
 }
 
 /*
@@ -137,8 +141,11 @@ present_destroy_window(WindowPtr window)
         present_clear_window_notifies(window);
         present_free_events(window);
         present_free_window_vblank(window);
-        present_clear_window_flip(window);
-        present_free_window_vblank_idle(window);
+
+        if (screen_priv->rootless_info)
+            present_clear_window_flip_rootless(window); //TODOX: fct ptr?
+        else
+            present_clear_window_flip(window);
 
         xorg_list_del(&window_priv->screen_list);
         free(window_priv);
@@ -192,6 +199,32 @@ present_clip_notify(WindowPtr window, int dx, int dy)
     wrap(screen_priv, screen, ClipNotify, present_clip_notify);
 }
 
+static present_screen_priv_ptr
+present_screen_priv_init(ScreenPtr screen)
+{
+    present_screen_priv_ptr screen_priv;
+
+    if (!dixRegisterPrivateKey(&present_screen_private_key, PRIVATE_SCREEN, 0))
+        return NULL;
+
+    if (!dixRegisterPrivateKey(&present_window_private_key, PRIVATE_WINDOW, 0))
+        return NULL;
+
+    screen_priv = calloc(1, sizeof (present_screen_priv_rec));
+    if (!screen_priv)
+        return NULL;
+
+    wrap(screen_priv, screen, CloseScreen, present_close_screen);
+    wrap(screen_priv, screen, DestroyWindow, present_destroy_window);
+    wrap(screen_priv, screen, ConfigNotify, present_config_notify);
+    wrap(screen_priv, screen, ClipNotify, present_clip_notify);
+
+    xorg_list_init(&screen_priv->windows);
+    dixSetPrivate(&screen->devPrivates, &present_screen_private_key, screen_priv);
+
+    return screen_priv;
+}
+
 /*
  * Initialize a screen for use with present
  */
@@ -205,22 +238,40 @@ present_screen_init(ScreenPtr screen, present_screen_info_ptr info)
         return FALSE;
 
     if (!present_screen_priv(screen)) {
-        present_screen_priv_ptr screen_priv = calloc(1, sizeof (present_screen_priv_rec));
+        present_screen_priv_ptr screen_priv = present_screen_priv_init(screen);
         if (!screen_priv)
             return FALSE;
 
-        wrap(screen_priv, screen, CloseScreen, present_close_screen);
-        wrap(screen_priv, screen, DestroyWindow, present_destroy_window);
-        wrap(screen_priv, screen, ConfigNotify, present_config_notify);
-        wrap(screen_priv, screen, ClipNotify, present_clip_notify);
-
         screen_priv->info = info;
-        screen_priv->rootless = info && info->rootless;
-        xorg_list_init(&screen_priv->windows);
-
-        dixSetPrivate(&screen->devPrivates, &present_screen_private_key, screen_priv);
+        screen_priv->present_pixmap = &present_scrmd_pixmap;
 
         present_fake_screen_init(screen);
+    }
+
+    return TRUE;
+}
+
+/*
+ * Initialize a screen for use with present in rootless mode
+ */
+int
+present_rootless_screen_init(ScreenPtr screen, present_rootless_screen_info_ptr info)
+{
+    if (!dixRegisterPrivateKey(&present_screen_private_key, PRIVATE_SCREEN, 0))
+        return FALSE;
+
+    if (!dixRegisterPrivateKey(&present_window_private_key, PRIVATE_WINDOW, 0))
+        return FALSE;
+
+    if (!present_screen_priv(screen)) {
+        present_screen_priv_ptr screen_priv = present_screen_priv_init(screen);
+        if (!screen_priv)
+            return FALSE;
+
+        screen_priv->rootless_info = info;
+        screen_priv->present_pixmap = &present_rootless_pixmap;
+
+        present_fake_screen_init(screen);   //TODOX: not needed in rootless?
     }
 
     return TRUE;

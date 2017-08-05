@@ -35,7 +35,7 @@
 static uint64_t         present_event_id;
 static struct xorg_list present_exec_queue;
 static struct xorg_list present_flip_queue;
-static struct xorg_list present_idle_queue;
+//static struct xorg_list present_idle_queue;
 
 //#if 0
 //#define DebugPresent(x) ErrorF x
@@ -150,35 +150,30 @@ present_check_flip(RRCrtcPtr    crtc,
         return FALSE;
     }
 
-    /* In Rootless mode we do individual flips per window.
-     * In particular the DDX needs to do the eventual compositing tasks.
-     */
-    if (!screen_priv->rootless) {
-        /* Make sure the window hasn't been redirected with Composite */
-        window_pixmap = screen->GetWindowPixmap(window);
-        if (window_pixmap != screen->GetScreenPixmap(screen) &&
-            window_pixmap != screen_priv->flip_pixmap &&
-            window_pixmap != present_flip_pending_pixmap(screen))
-            return FALSE;
+    /* Make sure the window hasn't been redirected with Composite */
+    window_pixmap = screen->GetWindowPixmap(window);
+    if (window_pixmap != screen->GetScreenPixmap(screen) &&
+        window_pixmap != screen_priv->flip_pixmap &&
+        window_pixmap != present_flip_pending_pixmap(screen))
+        return FALSE;
 
-        /* Check for full-screen window */
-        if (!RegionEqual(&window->clipList, &root->winSize)) {
-            return FALSE;
-        }
-
-        /* Make sure the area marked as valid fills the screen */
-        if (valid && !RegionEqual(valid, &root->winSize)) {
-            return FALSE;
-        }
-
-        /* Does the window match the pixmap exactly? */
-        if (window->drawable.x != 0 || window->drawable.y != 0)
-            return FALSE;
-        #ifdef COMPOSITE
-        if (window->drawable.x != pixmap->screen_x || window->drawable.y != pixmap->screen_y)
-            return FALSE;
-        #endif
+    /* Check for full-screen window */
+    if (!RegionEqual(&window->clipList, &root->winSize)) {
+        return FALSE;
     }
+
+    /* Make sure the area marked as valid fills the screen */
+    if (valid && !RegionEqual(valid, &root->winSize)) {
+        return FALSE;
+    }
+
+    /* Does the window match the pixmap exactly? */
+    if (window->drawable.x != 0 || window->drawable.y != 0)
+        return FALSE;
+    #ifdef COMPOSITE
+    if (window->drawable.x != pixmap->screen_x || window->drawable.y != pixmap->screen_y)
+        return FALSE;
+    #endif
 
     if (window->drawable.width != pixmap->drawable.width ||
             window->drawable.height != pixmap->drawable.height)
@@ -208,7 +203,7 @@ present_flip(RRCrtcPtr crtc,
     return (*screen_priv->info->flip) (crtc, event_id, target_msc, pixmap, sync_flip);
 }
 
-static void
+void
 present_vblank_notify(present_vblank_ptr vblank, CARD8 kind, CARD8 mode, uint64_t ust, uint64_t crtc_msc)
 {
     int         n;
@@ -224,7 +219,7 @@ present_vblank_notify(present_vblank_ptr vblank, CARD8 kind, CARD8 mode, uint64_
     }
 }
 
-static void
+void
 present_pixmap_idle(PixmapPtr pixmap, WindowPtr window, CARD32 serial, struct present_fence *present_fence)
 {
     if (present_fence)
@@ -404,7 +399,7 @@ present_set_tree_pixmap_visit(WindowPtr window, void *data)
     return WT_WALKCHILDREN;
 }
 
-static void
+void
 present_set_tree_pixmap(WindowPtr window,
                         PixmapPtr expected,
                         PixmapPtr pixmap)
@@ -509,22 +504,6 @@ present_unflip(ScreenPtr screen)
     (*screen_priv->info->unflip) (screen, screen_priv->unflip_event_id);
 }
 
-/*
- * Free any left over idle vblanks
- */
-void
-present_free_window_vblank_idle(WindowPtr window)
-{
-    present_window_priv_ptr         window_priv = present_window_priv(window);
-    present_vblank_ptr              vblank, tmp;
-
-    xorg_list_for_each_entry_safe(vblank, tmp, &window_priv->idle_vblank, window_list) {
-        /* Deletes it from this list as well. */
-        present_flip_idle_rootless_vblank(vblank);  //TODOX: fctptr
-    }
-    present_flip_idle_rootless_active(window_priv->window); //TODOX: fctptr
-}
-
 static void
 present_flip_notify(present_vblank_ptr vblank, uint64_t ust, uint64_t crtc_msc)
 {
@@ -590,15 +569,6 @@ present_event_notify(uint64_t event_id, uint64_t ust, uint64_t msc)
             return;
         }
     }
-
-    xorg_list_for_each_entry(vblank, &present_idle_queue, event_queue) {
-        if (vblank->event_id == event_id) {
-            present_flip_idle_rootless_vblank(vblank); //TODOX: fctptr
-            return;
-        }
-    }
-
-    //TODOX: call to present_rootless_event_unflip and return in case it's rootless
 
     for (s = 0; s < screenInfo.numScreens; s++) {
         ScreenPtr               screen = screenInfo.screens[s];
@@ -776,7 +746,7 @@ present_execute(present_vblank_ptr vblank, uint64_t ust, uint64_t crtc_msc)
     ScreenPtr                   screen = window->drawable.pScreen;
     present_screen_priv_ptr     screen_priv = present_screen_priv(screen);
 
-    if (!present_execute_wait(vblank, msc))
+    if (!present_execute_wait(vblank, crtc_msc))
         return;
 
     if (vblank->flip && vblank->pixmap && vblank->window) {
@@ -871,6 +841,7 @@ present_execute(present_vblank_ptr vblank, uint64_t ust, uint64_t crtc_msc)
 void
 present_timings(present_window_priv_ptr window_priv,
                 RRCrtcPtr target_crtc,
+                uint32_t options,
                 uint64_t *ust,
                 uint64_t *crtc_msc,
                 uint64_t *target_msc,
@@ -878,34 +849,36 @@ present_timings(present_window_priv_ptr window_priv,
                 uint64_t divisor,
                 uint64_t remainder)
 {
-    WindowPtr window = window_priv->window;
+    WindowPtr   window = window_priv->window;
+    ScreenPtr   screen = window->drawable.pScreen;
+    int         ret;
 
-    ret = present_get_ust_msc(screen, target_crtc, &ust, &crtc_msc);
+    ret = present_get_ust_msc(screen, target_crtc, ust, crtc_msc);    //TODOX: in rootless call present_rootless_get_ust_msc
 
-    target_msc = present_window_to_crtc_msc(window, target_crtc, window_msc, crtc_msc);
+    target_msc = present_window_to_crtc_msc(window, target_crtc, window_msc, *crtc_msc);
 
     if (ret == Success) {
         /* Stash the current MSC away in case we need it later
          */
-        window_priv->msc = crtc_msc;
+        window_priv->msc = *crtc_msc;
     }
 
     /* Adjust target_msc to match modulus
      */
-    if (msc_is_equal_or_after(crtc_msc, target_msc)) {
+    if (msc_is_equal_or_after(*crtc_msc, *target_msc)) {
         if (divisor != 0) {
-            target_msc = crtc_msc - (crtc_msc % divisor) + remainder;
+            *target_msc = *crtc_msc - (*crtc_msc % divisor) + remainder;
             if (options & PresentOptionAsync) {
-                if (msc_is_after(crtc_msc, target_msc))
-                    target_msc += divisor;
+                if (msc_is_after(*crtc_msc, *target_msc))
+                    *target_msc += divisor;
             } else {
-                if (msc_is_equal_or_after(crtc_msc, target_msc))
-                    target_msc += divisor;
+                if (msc_is_equal_or_after(*crtc_msc, *target_msc))
+                    *target_msc += divisor;
             }
         } else {
-            target_msc = crtc_msc;
+            *target_msc = *crtc_msc;
             if (!(options & PresentOptionAsync))
-                target_msc++;
+                *target_msc++;
         }
     }
 }
@@ -929,7 +902,7 @@ present_scrap_obsolete_vblank(present_vblank_ptr vblank)
         present_re_execute(vblank);
 }
 
-Bool
+present_vblank_ptr
 present_create_vblank(present_window_priv_ptr window_priv,
                       PixmapPtr pixmap,
                       CARD32 serial,
@@ -942,14 +915,19 @@ present_create_vblank(present_window_priv_ptr window_priv,
                       SyncFence *idle_fence,
                       uint32_t options,
                       present_notify_ptr notifies,
-                      int num_notifies)
+                      int num_notifies,
+                      uint64_t target_msc,
+                      uint64_t crtc_msc,
+                      Bool *execute_now)
 {
-    WindowPtr   window = window_priv->window;
-    int         ret;
+    WindowPtr                   window = window_priv->window;
+    ScreenPtr                   screen = window->drawable.pScreen;
+    present_screen_priv_ptr     screen_priv = present_screen_priv(screen);
+    present_vblank_ptr          vblank;
 
     vblank = calloc (1, sizeof (present_vblank_rec));
     if (!vblank)
-        return BadAlloc;
+        return NULL;
 
     xorg_list_append(&vblank->window_list, &window_priv->vblank);
     xorg_list_init(&vblank->event_queue);
@@ -957,7 +935,12 @@ present_create_vblank(present_window_priv_ptr window_priv,
     vblank->screen = screen;
     vblank->window = window;
     vblank->pixmap = pixmap;
-    vblank->event_id = ++present_event_id;
+
+    if (screen_priv->rootless_info)
+        vblank->event_id = ++window_priv->event_id;
+    else
+        vblank->event_id = ++present_event_id; //TODOX fct ptr?
+
     if (pixmap) {
         vblank->kind = PresentCompleteKindPixmap;
         pixmap->refcnt++;
@@ -1022,25 +1005,25 @@ present_create_vblank(present_window_priv_ptr window_priv,
     xorg_list_append(&vblank->event_queue, &present_exec_queue);
     vblank->queued = TRUE;
     if (msc_is_after(target_msc, crtc_msc)) {
-        ret = present_queue_vblank(screen, target_crtc, vblank->event_id, target_msc);
-        if (ret == Success)
-            return Success;
+        if (present_queue_vblank(screen, target_crtc, vblank->event_id, target_msc) == Success) {
+            execute_now = FALSE;
+            return vblank;
+        }
 
         DebugPresent(("present_queue_vblank failed\n"));
     }
 
-    present_execute(vblank, ust, crtc_msc);
-    return Success;
+    execute_now = TRUE;
+    return vblank;
 
 no_mem:
-    ret = BadAlloc;
     vblank->notifies = NULL;
     present_vblank_destroy(vblank);
-    return ret;
+    return NULL;
 }
 
 int
-present_pixmap(WindowPtr window,
+present_scrmd_pixmap(present_window_priv_ptr window_priv,
                PixmapPtr pixmap,
                CARD32 serial,
                RegionPtr valid,
@@ -1057,16 +1040,14 @@ present_pixmap(WindowPtr window,
                present_notify_ptr notifies,
                int num_notifies)
 {
+    WindowPtr                   window = window_priv->window;
+    ScreenPtr                   screen = window->drawable.pScreen;
+    present_screen_priv_ptr     screen_priv = present_screen_priv(screen);
     uint64_t                    ust = 0;
     uint64_t                    target_msc;
     uint64_t                    crtc_msc = 0;
     present_vblank_ptr          vblank, tmp;
-    ScreenPtr                   screen = window->drawable.pScreen;
-    present_window_priv_ptr     window_priv = present_get_window_priv(window, TRUE);
-    present_screen_priv_ptr     screen_priv = present_screen_priv(screen);
-
-    if (!window_priv)
-        return BadAlloc;
+    Bool                        execute;
 
     if (!screen_priv || !screen_priv->info)
         target_crtc = NULL;
@@ -1082,6 +1063,7 @@ present_pixmap(WindowPtr window,
 
     present_timings(window_priv,
                     target_crtc,
+                    options,
                     &ust,
                     &crtc_msc,
                     &target_msc,
@@ -1113,19 +1095,73 @@ present_pixmap(WindowPtr window,
         }
     }
 
-    return present_create_vblank(window,
-                                 pixmap,
-                                 serial,
-                                 valid,
-                                 update,
-                                 x_off,
-                                 y_off,
-                                 target_crtc,
-                                 *wait_fence,
-                                 *idle_fence,
-                                 options,
-                                 notifies,
-                                 num_notifies);
+    vblank = present_create_vblank(window_priv,
+                                pixmap,
+                                serial,
+                                valid,
+                                update,
+                                x_off,
+                                y_off,
+                                target_crtc,
+                                wait_fence,
+                                idle_fence,
+                                options,
+                                notifies,
+                                num_notifies,
+                                target_msc,
+                                crtc_msc,
+                                &execute);
+
+    if (!vblank)
+        return BadAlloc;
+
+    if (execute)
+        present_execute(vblank, ust, crtc_msc);
+
+    return Success;
+}
+
+int
+present_pixmap(WindowPtr window,
+               PixmapPtr pixmap,
+               CARD32 serial,
+               RegionPtr valid,
+               RegionPtr update,
+               int16_t x_off,
+               int16_t y_off,
+               RRCrtcPtr target_crtc,
+               SyncFence *wait_fence,
+               SyncFence *idle_fence,
+               uint32_t options,
+               uint64_t window_msc,
+               uint64_t divisor,
+               uint64_t remainder,
+               present_notify_ptr notifies,
+               int num_notifies)
+{
+    ScreenPtr                   screen = window->drawable.pScreen;
+    present_window_priv_ptr     window_priv = present_get_window_priv(window, TRUE);
+    present_screen_priv_ptr     screen_priv = present_screen_priv(screen);
+
+    if (!window_priv)
+        return BadAlloc;
+
+    return screen_priv->present_pixmap(window_priv,
+                                   pixmap,
+                                   serial,
+                                   valid,
+                                   update,
+                                   x_off,
+                                   y_off,
+                                   target_crtc,
+                                   wait_fence,
+                                   idle_fence,
+                                   options,
+                                   window_msc,
+                                   divisor,
+                                   remainder,
+                                   notifies,
+                                   num_notifies);
 }
 
 void
@@ -1232,7 +1268,7 @@ present_init(void)
 {
     xorg_list_init(&present_exec_queue);
     xorg_list_init(&present_flip_queue);
-    xorg_list_init(&present_idle_queue);
+//    xorg_list_init(&present_idle_queue);
     present_fake_queue_init();
     return TRUE;
 }

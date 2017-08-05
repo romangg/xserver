@@ -123,14 +123,25 @@ typedef struct present_screen_info {
     uint32_t                            capabilities;
     present_check_flip_ptr              check_flip;
     present_flip_ptr                    flip;
-    present_flip_rootless_ptr           flip_rootless;
     present_flip_executed_ptr           flip_executed;
     present_unflip_ptr                  unflip;
-    present_unflip_rootless_ptr         unflip_rootless;
-
-    /* Rootless mode can only be used, when there is exactly one CRTC per window */
-    Bool                                rootless;
 } present_screen_info_rec, *present_screen_info_ptr;
+
+typedef struct present_rootless_screen_info {
+    uint32_t                            version;
+
+//    present_get_crtc_ptr                get_crtc;
+    present_get_ust_msc_ptr             get_ust_msc;
+    present_queue_vblank_ptr            queue_vblank;
+    present_abort_vblank_ptr            abort_vblank;
+    present_flush_ptr                   flush;
+    uint32_t                            capabilities;
+    present_check_flip_ptr              check_flip;
+    present_flip_rootless_ptr           flip;
+    present_flip_executed_ptr           flip_executed;
+    present_unflip_rootless_ptr         unflip;
+
+} present_rootless_screen_info_rec, *present_rootless_screen_info_ptr;
 
 /*
  * Called when 'event_id' occurs. 'ust' and 'msc' indicate when the
@@ -139,6 +150,13 @@ typedef struct present_screen_info {
 extern _X_EXPORT void
 present_event_notify(uint64_t event_id, uint64_t ust, uint64_t msc);
 
+/*
+ * Called when 'event_id' occurs for 'window'.
+ * 'ust' and 'msc' indicate when the event actually happened
+ */
+extern _X_EXPORT void
+present_rootless_event_notify(WindowPtr window, uint64_t event_id, uint64_t ust, uint64_t msc);
+
 /* 'crtc' has been turned off, so any pending events will never occur.
  */
 extern _X_EXPORT void
@@ -146,6 +164,9 @@ present_event_abandon(RRCrtcPtr crtc);
 
 extern _X_EXPORT Bool
 present_screen_init(ScreenPtr screen, present_screen_info_ptr info);
+
+extern _X_EXPORT Bool
+present_rootless_screen_init(ScreenPtr screen, present_rootless_screen_info_ptr info);
 
 typedef void (*present_complete_notify_proc)(WindowPtr window,
                                              CARD8 kind,
