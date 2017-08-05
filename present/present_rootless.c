@@ -552,12 +552,13 @@ present_rootless_present_pixmap(present_window_priv_ptr window_priv,
 {
     WindowPtr                   window = window_priv->window;
     ScreenPtr                   screen = window->drawable.pScreen;
+    present_screen_priv_ptr     screen_priv = present_screen_priv(screen);
     uint64_t                    ust = 0;
     uint64_t                    target_msc;
     uint64_t                    crtc_msc = 0;
     present_vblank_ptr          vblank, tmp;
 
-    target_crtc = present_get_crtc(window);
+    target_crtc = present_rootless_get_crtc(screen_priv, window);
 
     if (present_rootless_get_ust_msc(screen, window, &ust, &crtc_msc) == Success)
         window_priv->msc = crtc_msc;
