@@ -77,11 +77,13 @@ present_close_screen(ScreenPtr screen)
 static void
 present_free_window_vblank(WindowPtr window)
 {
+    ScreenPtr                   screen = window->drawable.pScreen;
+    present_screen_priv_ptr     screen_priv = present_screen_priv(screen);
     present_window_priv_ptr     window_priv = present_window_priv(window);
     present_vblank_ptr          vblank, tmp;
 
     xorg_list_for_each_entry_safe(vblank, tmp, &window_priv->vblank, window_list) {
-        present_abort_vblank(window->drawable.pScreen, vblank->crtc, vblank->event_id, vblank->target_msc);
+        screen_priv->abort_vblank(screen, vblank->crtc, vblank->event_id, vblank->target_msc);
         present_vblank_destroy(vblank);
     }
 }
@@ -243,7 +245,6 @@ present_screen_init(ScreenPtr screen, present_screen_info_ptr info)
             return FALSE;
 
         screen_priv->info = info;
-        screen_priv->present_pixmap = &present_scrmode_pixmap;
 
         present_fake_screen_init(screen);
     }
@@ -299,7 +300,7 @@ present_extension_init(void)
 
     present_request = extension->base;
 
-    if (!present_init())
+    if (!present_scrmode_init())
         goto bail;
 
     if (!present_event_init())

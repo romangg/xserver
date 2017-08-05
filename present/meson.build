@@ -1,5 +1,6 @@
 srcs_present = [
     'present.c',
+    'present_scrmode.c',
     'present_rootless.c',
     'present_event.c',
     'present_fake.c',

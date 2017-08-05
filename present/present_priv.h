@@ -156,6 +156,7 @@ typedef int (*present_priv_queue_vblank_ptr)(ScreenPtr screen,
                                  uint64_t msc);
 typedef RRCrtcPtr (*present_priv_get_crtc_ptr)(present_screen_priv_ptr screen_priv, WindowPtr window);
 typedef uint32_t (*present_priv_query_capabilities_ptr)(present_screen_priv_ptr screen_priv);
+typedef void (*present_priv_abort_vblank_ptr)(ScreenPtr screen, void *target, uint64_t event_id, uint64_t msc);
 
 struct present_screen_priv {
     CloseScreenProcPtr          CloseScreen;
@@ -192,6 +193,7 @@ struct present_screen_priv {
     present_priv_get_crtc_ptr           get_crtc;
     present_priv_query_capabilities_ptr query_capabilities;
     present_priv_check_flip_ptr         check_flip;
+    present_priv_abort_vblank_ptr       abort_vblank;
 
 
 };
@@ -271,8 +273,8 @@ present_notify_msc(WindowPtr window,
                    uint64_t divisor,
                    uint64_t remainder);
 
-void
-present_abort_vblank(ScreenPtr screen, RRCrtcPtr crtc, uint64_t event_id, uint64_t msc);
+//void
+//present_abort_vblank(ScreenPtr screen, RRCrtcPtr crtc, uint64_t event_id, uint64_t msc);
 
 void
 present_vblank_destroy(present_vblank_ptr vblank);
