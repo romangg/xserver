@@ -403,9 +403,8 @@ present_create_vblank(present_window_priv_ptr window_priv,
                       uint32_t options,
                       present_notify_ptr notifies,
                       int num_notifies,
-                      uint64_t target_msc,
-                      uint64_t crtc_msc,
-                      Bool *execute_now)
+                      uint64_t *target_msc,
+                      uint64_t crtc_msc)
 {
     WindowPtr                   window = window_priv->window;
     ScreenPtr                   screen = window->drawable.pScreen;
@@ -486,18 +485,6 @@ present_create_vblank(present_window_priv_ptr window_priv,
                       vblank->pixmap->drawable.id, vblank->window->drawable.id,
                       target_crtc, vblank->flip, vblank->sync_flip, vblank->serial));
 
-    xorg_list_append(&vblank->event_queue, &present_exec_queue);    //TODOX
-    vblank->queued = TRUE;
-    if (msc_is_after(target_msc, crtc_msc)) {
-        if (screen_priv->queue_vblank(screen, target_crtc, vblank->event_id, target_msc) == Success) {
-            *execute_now = FALSE;
-            return vblank;
-        }
-
-        DebugPresent(("present_queue_vblank failed\n"));
-    }
-
-    *execute_now = TRUE;
     return vblank;
 
 no_mem:

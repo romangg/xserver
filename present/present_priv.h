@@ -323,9 +323,8 @@ present_create_vblank(present_window_priv_ptr window_priv,
                       uint32_t options,
                       present_notify_ptr notifies,
                       int num_notifies,
-                      uint64_t target_msc,
-                      uint64_t crtc_msc,
-                      Bool *execute_now);
+                      uint64_t *target_msc,
+                      uint64_t crtc_msc);
 
 void
 present_scrap_obsolete_vblank(present_vblank_ptr vblank);

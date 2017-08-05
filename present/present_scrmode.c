@@ -96,7 +96,7 @@ present_scrmode_check_flip(RRCrtcPtr    crtc,
     window_pixmap = screen->GetWindowPixmap(window);
     if (window_pixmap != screen->GetScreenPixmap(screen) &&
         window_pixmap != screen_priv->flip_pixmap &&
-        window_pixmap != present_flip_pending_pixmap(screen))
+        window_pixmap != present_scrmode_flip_pending_pixmap(screen))
         return FALSE;
 
     /* Check for full-screen window */
@@ -553,7 +553,6 @@ present_scrmode_pixmap(present_window_priv_ptr window_priv,
     uint64_t                    target_msc;
     uint64_t                    crtc_msc = 0;
     present_vblank_ptr          vblank, tmp;
-    Bool                        execute;
 
     if (!screen_priv || !screen_priv->info)
         target_crtc = NULL;
@@ -616,15 +615,22 @@ present_scrmode_pixmap(present_window_priv_ptr window_priv,
                                 options,
                                 notifies,
                                 num_notifies,
-                                target_msc,
-                                crtc_msc,
-                                &execute);
+                                &target_msc,
+                                crtc_msc);
 
     if (!vblank)
         return BadAlloc;
 
-    if (execute)
-        present_scrmode_execute(vblank, ust, crtc_msc);
+    xorg_list_append(&vblank->event_queue, &present_exec_queue);
+    vblank->queued = TRUE;
+    if (crtc_msc < target_msc) {
+        if (present_scrmode_queue_vblank(screen, target_crtc, vblank->event_id, target_msc) == Success) {
+            return Success;
+        }
+        DebugPresent(("present_queue_vblank failed\n"));
+    }
+
+    present_scrmode_execute(vblank, ust, crtc_msc);
 
     return Success;
 }

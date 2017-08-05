@@ -511,11 +511,11 @@ present_rootless_pixmap(present_window_priv_ptr window_priv,
                         int num_notifies)
 {
     WindowPtr                   window = window_priv->window;
+    ScreenPtr                   screen = window->drawable.pScreen;
     uint64_t                    ust = 0;
     uint64_t                    target_msc;
     uint64_t                    crtc_msc = 0;
     present_vblank_ptr          vblank, tmp;
-    Bool                        execute;
 
     target_crtc = present_get_crtc(window);
 
@@ -563,15 +563,21 @@ present_rootless_pixmap(present_window_priv_ptr window_priv,
                                 options,
                                 notifies,
                                 num_notifies,
-                                target_msc,
-                                crtc_msc,
-                                &execute);
+                                &target_msc,
+                                crtc_msc);
     if (!vblank)
         return BadAlloc;
 
-    if (execute)
-        present_rootless_execute(vblank, ust, crtc_msc);
+    xorg_list_append(&vblank->event_queue, &window_priv->exec_queue);
+    vblank->queued = TRUE;
+    if (crtc_msc < target_msc) {
+        if (present_rootless_queue_vblank(screen, window, vblank->event_id, target_msc) == Success) {
+            return Success;
+        }
+        DebugPresent(("present_queue_vblank failed\n"));
+    }
 
+    present_rootless_execute(vblank, ust, crtc_msc);
     return Success;
 }
 
