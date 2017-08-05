@@ -30,15 +30,15 @@
 #include "present_priv.h"
 
 static void
-present_rootless_execute(present_vblank_ptr vblank, uint64_t ust, uint64_t crtc_msc);
+present_winmode_execute(present_vblank_ptr vblank, uint64_t ust, uint64_t crtc_msc);
 
 static int
-present_rootless_get_ust_msc(ScreenPtr screen, WindowPtr window, uint64_t *ust, uint64_t *msc)
+present_winmode_get_ust_msc(ScreenPtr screen, WindowPtr window, uint64_t *ust, uint64_t *msc)
 {
     present_screen_priv_ptr     screen_priv = present_screen_priv(screen);
     int                         ret;
 
-    ret = (*screen_priv->rootless_info->get_ust_msc)(window, ust, msc);
+    ret = (*screen_priv->winmode_info->get_ust_msc)(window, ust, msc);
 
     if (ret == Success)
         return ret;
@@ -48,15 +48,15 @@ present_rootless_get_ust_msc(ScreenPtr screen, WindowPtr window, uint64_t *ust, 
 }
 
 static RRCrtcPtr
-present_rootless_get_crtc(present_screen_priv_ptr screen_priv, WindowPtr window)
+present_winmode_get_crtc(present_screen_priv_ptr screen_priv, WindowPtr window)
 {
-    return (*screen_priv->rootless_info->get_crtc)(window);
+    return (*screen_priv->winmode_info->get_crtc)(window);
 }
 
 static uint32_t
-present_rootless_query_capabilities(present_screen_priv_ptr screen_priv)
+present_winmode_query_capabilities(present_screen_priv_ptr screen_priv)
 {
-    return screen_priv->rootless_info->capabilities;
+    return screen_priv->winmode_info->capabilities;
 }
 
 /*
@@ -64,26 +64,26 @@ present_rootless_query_capabilities(present_screen_priv_ptr screen_priv)
  * to re-try the request
  */
 static void
-present_rootless_re_execute(present_vblank_ptr vblank)
+present_winmode_re_execute(present_vblank_ptr vblank)
 {
     uint64_t            ust = 0, crtc_msc = 0;
 
-    (void) present_rootless_get_ust_msc(vblank->screen, vblank->window, &ust, &crtc_msc);  //TODOX: guard against vblank->window == NULL?
+    (void) present_winmode_get_ust_msc(vblank->screen, vblank->window, &ust, &crtc_msc);  //TODOX: guard against vblank->window == NULL?
 
-    present_rootless_execute(vblank, ust, crtc_msc);
+    present_winmode_execute(vblank, ust, crtc_msc);
 }
 
 static void
-present_rootless_flush(WindowPtr window)
+present_winmode_flush(WindowPtr window)
 {
     ScreenPtr                   screen = window->drawable.pScreen;
     present_screen_priv_ptr     screen_priv = present_screen_priv(screen);
 
-    (*screen_priv->rootless_info->flush) (window);
+    (*screen_priv->winmode_info->flush) (window);
 }
 
 static void
-present_rootless_flip_try_ready(WindowPtr window)
+present_winmode_flip_try_ready(WindowPtr window)
 {
     present_window_priv_ptr window_priv = present_window_priv(window);
     present_vblank_ptr      vblank;
@@ -91,14 +91,14 @@ present_rootless_flip_try_ready(WindowPtr window)
 
     xorg_list_for_each_entry(vblank, &window_priv->flip_queue, event_queue) {
         if (vblank->queued) {
-            present_rootless_re_execute(vblank);
+            present_winmode_re_execute(vblank);
             return;
         }
     }
 }
 
 static void
-present_rootless_flip_idle_vblank(present_vblank_ptr vblank)
+present_winmode_flip_idle_vblank(present_vblank_ptr vblank)
 {
     present_pixmap_idle(vblank->pixmap, vblank->window,
                         vblank->serial, vblank->idle_fence);
@@ -111,12 +111,12 @@ present_rootless_flip_idle_vblank(present_vblank_ptr vblank)
 }
 
 static void
-present_rootless_flip_idle_active(WindowPtr window)
+present_winmode_flip_idle_active(WindowPtr window)
 {
     present_window_priv_ptr window_priv = present_window_priv(window);
 
     if (window_priv->flip_active) {
-        present_rootless_flip_idle_vblank(window_priv->flip_active);
+        present_winmode_flip_idle_vblank(window_priv->flip_active);
         window_priv->flip_active = NULL;
     }
 //    /* if we lose the active flip, the flipping window could be reparented and the DDX
@@ -128,20 +128,20 @@ present_rootless_flip_idle_active(WindowPtr window)
  * Free any left over idle vblanks
  */
 void
-present_rootless_free_idle_vblanks(WindowPtr window)
+present_winmode_free_idle_vblanks(WindowPtr window)
 {
     present_window_priv_ptr         window_priv = present_window_priv(window);
     present_vblank_ptr              vblank, tmp;
 
     xorg_list_for_each_entry_safe(vblank, tmp, &window_priv->idle_vblank, window_list) {
         /* Deletes it from this list as well. */
-        present_rootless_flip_idle_vblank(vblank);
+        present_winmode_flip_idle_vblank(vblank);
     }
-    present_rootless_flip_idle_active(window_priv->window);
+    present_winmode_flip_idle_active(window_priv->window);
 }
 
 static int
-present_rootless_queue_vblank(ScreenPtr screen,
+present_winmode_queue_vblank(ScreenPtr screen,
                               WindowPtr window,
                               RRCrtcPtr crtc,
                               uint64_t event_id,
@@ -152,13 +152,13 @@ present_rootless_queue_vblank(ScreenPtr screen,
         ret = present_fake_queue_vblank(screen, window, event_id, msc);
     else {
         present_screen_priv_ptr     screen_priv = present_screen_priv(screen);
-        ret = (*screen_priv->rootless_info->queue_vblank) (window, crtc, event_id, msc);
+        ret = (*screen_priv->winmode_info->queue_vblank) (window, crtc, event_id, msc);
     }
     return ret;
 }
 
 void
-present_rootless_restore_window_pixmap(WindowPtr window)
+present_winmode_restore_window_pixmap(WindowPtr window)
 {
     ScreenPtr                   screen = window->drawable.pScreen;
     present_window_priv_ptr     window_priv = present_window_priv(window);
@@ -185,18 +185,18 @@ present_rootless_restore_window_pixmap(WindowPtr window)
 }
 
 void
-present_rootless_set_abort_flip(WindowPtr window)
+present_winmode_set_abort_flip(WindowPtr window)
 {
     present_window_priv_ptr window_priv = present_window_priv(window);
 
     if (!window_priv->flip_pending->abort_flip) {
-        present_rootless_restore_window_pixmap(window);
+        present_winmode_restore_window_pixmap(window);
         window_priv->flip_pending->abort_flip = TRUE;
     }
 }
 
 static void
-present_rootless_unflip(WindowPtr window)
+present_winmode_unflip(WindowPtr window)
 {
     present_window_priv_ptr window_priv = present_window_priv(window);
     present_screen_priv_ptr screen_priv = present_screen_priv(window->drawable.pScreen);
@@ -204,16 +204,16 @@ present_rootless_unflip(WindowPtr window)
     assert (!window_priv->unflip_event_id);
     assert (!window_priv->flip_pending);
 
-    present_rootless_restore_window_pixmap(window);
-    present_rootless_free_idle_vblanks(window);
+    present_winmode_restore_window_pixmap(window);
+    present_winmode_free_idle_vblanks(window);
 
     window_priv->unflip_event_id = ++window_priv->event_id;
     DebugPresent(("u %lld\n", window_priv->unflip_event_id));
-    (*screen_priv->rootless_info->unflip) (window, window_priv->unflip_event_id);
+    (*screen_priv->winmode_info->unflip) (window, window_priv->unflip_event_id);
 }
 
 static void
-present_rootless_flip_notify(present_vblank_ptr vblank, uint64_t ust, uint64_t crtc_msc)
+present_winmode_flip_notify(present_vblank_ptr vblank, uint64_t ust, uint64_t crtc_msc)
 {
     WindowPtr                   window = vblank->window;
     present_window_priv_ptr     window_priv = present_window_priv(window);
@@ -238,14 +238,14 @@ present_rootless_flip_notify(present_vblank_ptr vblank, uint64_t ust, uint64_t c
     window_priv->flip_pending = NULL;
 
     if (vblank->abort_flip)
-        present_rootless_unflip(window);
+        present_winmode_unflip(window);
 
     present_vblank_notify(vblank, PresentCompleteKindPixmap, PresentCompleteModeFlip, ust, crtc_msc);
-    present_rootless_flip_try_ready(window);
+    present_winmode_flip_try_ready(window);
 }
 
 void
-present_rootless_event_notify(WindowPtr window, uint64_t event_id, uint64_t ust, uint64_t msc)
+present_winmode_event_notify(WindowPtr window, uint64_t event_id, uint64_t ust, uint64_t msc)
 {
     present_window_priv_ptr     window_priv = present_window_priv(window);
     present_vblank_ptr          vblank;
@@ -259,17 +259,17 @@ present_rootless_event_notify(WindowPtr window, uint64_t event_id, uint64_t ust,
     DebugPresent(("\te %lld ust %lld msc %lld\n", event_id, ust, msc));
     xorg_list_for_each_entry(vblank, &window_priv->exec_queue, event_queue) {
         if (event_id == vblank->event_id) {
-            present_rootless_execute(vblank, ust, msc);
+            present_winmode_execute(vblank, ust, msc);
             return;
         }
     }
     xorg_list_for_each_entry(vblank, &window_priv->flip_queue, event_queue) {
         if (vblank->event_id == event_id) {
             if (vblank->queued) {
-                present_rootless_execute(vblank, ust, msc);
+                present_winmode_execute(vblank, ust, msc);
             } else {
                 assert(vblank->window);
-                present_rootless_flip_notify(vblank, ust, msc);
+                present_winmode_flip_notify(vblank, ust, msc);
             }
             return;
         }
@@ -277,7 +277,7 @@ present_rootless_event_notify(WindowPtr window, uint64_t event_id, uint64_t ust,
 
     xorg_list_for_each_entry(vblank, &window_priv->idle_queue, event_queue) {
         if (vblank->event_id == event_id) {
-            present_rootless_flip_idle_vblank(vblank);
+            present_winmode_flip_idle_vblank(vblank);
             return;
         }
     }
@@ -285,13 +285,13 @@ present_rootless_event_notify(WindowPtr window, uint64_t event_id, uint64_t ust,
     if (event_id == window_priv->unflip_event_id) {
         DebugPresent(("\tun %lld\n", event_id));
         window_priv->unflip_event_id = 0;
-        present_rootless_flip_idle_active(window_priv->window);
-        present_rootless_flip_try_ready(window_priv->window);
+        present_winmode_flip_idle_active(window_priv->window);
+        present_winmode_flip_try_ready(window_priv->window);
     }
 }
 
 static Bool
-present_rootless_check_flip(RRCrtcPtr    crtc,
+present_winmode_check_flip(RRCrtcPtr    crtc,
                    WindowPtr    window,
                    PixmapPtr    pixmap,
                    Bool         sync_flip,
@@ -305,14 +305,14 @@ present_rootless_check_flip(RRCrtcPtr    crtc,
     if (!screen_priv)
         return FALSE;
 
-    if (!screen_priv->rootless_info)
+    if (!screen_priv->winmode_info)
         return FALSE;
 
 //    if (!crtc)
 //        return FALSE;
 
     /* Check to see if the driver supports flips at all */
-    if (!screen_priv->rootless_info->flip)
+    if (!screen_priv->winmode_info->flip)
         return FALSE;
 
     /* Source pixmap must align with window exactly */
@@ -325,8 +325,8 @@ present_rootless_check_flip(RRCrtcPtr    crtc,
         return FALSE;
 
     /* Ask the driver for permission */
-    if (screen_priv->rootless_info->check_flip) {
-        if (!(*screen_priv->rootless_info->check_flip) (crtc, window, pixmap, sync_flip)) {
+    if (screen_priv->winmode_info->check_flip) {
+        if (!(*screen_priv->winmode_info->check_flip) (crtc, window, pixmap, sync_flip)) {
             DebugPresent(("\td %08lx -> %08lx\n", window->drawable.id, pixmap ? pixmap->drawable.id : 0));
             return FALSE;
         }
@@ -340,7 +340,7 @@ present_rootless_check_flip(RRCrtcPtr    crtc,
  * in flipping and clean up as necessary
  */
 static void
-present_rootless_check_flip_window (WindowPtr window)
+present_winmode_check_flip_window (WindowPtr window)
 {
     present_window_priv_ptr     window_priv = present_window_priv(window);
     present_vblank_ptr          flip_pending;
@@ -360,17 +360,17 @@ present_rootless_check_flip_window (WindowPtr window)
     flip_active = window_priv->flip_active;
 
     if (flip_pending) {
-        if (!present_rootless_check_flip(flip_pending->crtc, flip_pending->window, flip_pending->pixmap,
+        if (!present_winmode_check_flip(flip_pending->crtc, flip_pending->window, flip_pending->pixmap,
                                 flip_pending->sync_flip, NULL, 0, 0))
-            present_rootless_set_abort_flip(window);
+            present_winmode_set_abort_flip(window);
     } else if (flip_active) {
-        if (!present_rootless_check_flip(flip_active->crtc, flip_active->window, flip_active->pixmap, flip_active->sync_flip, NULL, 0, 0))
-            present_rootless_unflip(window);
+        if (!present_winmode_check_flip(flip_active->crtc, flip_active->window, flip_active->pixmap, flip_active->sync_flip, NULL, 0, 0))
+            present_winmode_unflip(window);
     }
 
     /* Now check any queued vblanks */
     xorg_list_for_each_entry(vblank, &window_priv->vblank, window_list) {
-        if (vblank->queued && vblank->flip && !present_rootless_check_flip(vblank->crtc, window, vblank->pixmap, vblank->sync_flip, NULL, 0, 0)) {
+        if (vblank->queued && vblank->flip && !present_winmode_check_flip(vblank->crtc, window, vblank->pixmap, vblank->sync_flip, NULL, 0, 0)) {
             vblank->flip = FALSE;
             if (vblank->sync_flip)
                 vblank->requeue = TRUE;
@@ -379,7 +379,7 @@ present_rootless_check_flip_window (WindowPtr window)
 }
 
 static Bool
-present_rootless_flip(WindowPtr window,
+present_winmode_flip(WindowPtr window,
                       RRCrtcPtr crtc,
                       uint64_t event_id,
                       uint64_t target_msc,
@@ -389,7 +389,7 @@ present_rootless_flip(WindowPtr window,
     ScreenPtr                   screen = crtc->pScreen;
     present_screen_priv_ptr     screen_priv = present_screen_priv(screen);
 
-    return (*screen_priv->rootless_info->flip) (window, crtc, event_id, target_msc, pixmap, sync_flip);
+    return (*screen_priv->winmode_info->flip) (window, crtc, event_id, target_msc, pixmap, sync_flip);
 }
 
 /*
@@ -403,7 +403,7 @@ present_rootless_flip(WindowPtr window,
  */
 
 static void
-present_rootless_execute(present_vblank_ptr vblank, uint64_t ust, uint64_t crtc_msc)
+present_winmode_execute(present_vblank_ptr vblank, uint64_t ust, uint64_t crtc_msc)
 {
     WindowPtr                   window = vblank->window;
     ScreenPtr                   screen = window->drawable.pScreen;
@@ -447,7 +447,7 @@ present_rootless_execute(present_vblank_ptr vblank, uint64_t ust, uint64_t crtc_
              */
             window_priv->flip_pending = vblank;
 
-            if (present_rootless_flip(vblank->window, vblank->crtc, vblank->event_id, vblank->target_msc, vblank->pixmap, vblank->sync_flip)) {
+            if (present_winmode_flip(vblank->window, vblank->crtc, vblank->event_id, vblank->target_msc, vblank->pixmap, vblank->sync_flip)) {
                 /* Fix window pixmaps:
                  *  1) Remember original window pixmap
                  *  2) Set current flip window pixmap to the new pixmap
@@ -467,8 +467,8 @@ present_rootless_execute(present_vblank_ptr vblank, uint64_t ust, uint64_t crtc_
                     damage = &window->clipList;
 
                 DamageDamageRegion(&vblank->window->drawable, damage);
-                if (*screen_priv->rootless_info->flip_executed)
-                    (*screen_priv->rootless_info->flip_executed) (vblank->window, vblank->crtc, vblank->event_id, damage);
+                if (*screen_priv->winmode_info->flip_executed)
+                    (*screen_priv->winmode_info->flip_executed) (vblank->window, vblank->crtc, vblank->event_id, damage);
 
                 return;
             }
@@ -483,9 +483,9 @@ present_rootless_execute(present_vblank_ptr vblank, uint64_t ust, uint64_t crtc_
         DebugPresent(("\tc %p %8lld: %08lx -> %08lx\n", vblank, crtc_msc, vblank->pixmap->drawable.id, vblank->window->drawable.id));
 
         if (window_priv->flip_pending)
-            present_rootless_set_abort_flip(window);
+            present_winmode_set_abort_flip(window);
         else if (!window_priv->unflip_event_id && window_priv->flip_active)
-            present_rootless_unflip(window);
+            present_winmode_unflip(window);
 
         present_execute_flip_recover(vblank, crtc_msc);
         if (vblank->queued) {
@@ -500,13 +500,13 @@ present_rootless_execute(present_vblank_ptr vblank, uint64_t ust, uint64_t crtc_
 }
 
 static void
-present_rootless_create_event_id(present_window_priv_ptr window_priv, present_vblank_ptr vblank)
+present_winmode_create_event_id(present_window_priv_ptr window_priv, present_vblank_ptr vblank)
 {
     vblank->event_id = ++window_priv->event_id;
 }
 
 static uint64_t
-present_rootless_window_to_crtc_msc(WindowPtr window, RRCrtcPtr crtc, uint64_t window_msc, uint64_t new_msc)
+present_winmode_window_to_crtc_msc(WindowPtr window, RRCrtcPtr crtc, uint64_t window_msc, uint64_t new_msc)
 {
     present_window_priv_ptr     window_priv = present_get_window_priv(window, TRUE);
 
@@ -520,7 +520,7 @@ present_rootless_window_to_crtc_msc(WindowPtr window, RRCrtcPtr crtc, uint64_t w
              * we'll just use whatever previous MSC we'd seen from this CRTC
              */
 
-            if (present_rootless_get_ust_msc(window->drawable.pScreen, window, &old_ust, &old_msc) != Success)   // TODOX: why here again?
+            if (present_winmode_get_ust_msc(window->drawable.pScreen, window, &old_ust, &old_msc) != Success)   // TODOX: why here again?
                 old_msc = window_priv->msc;
 
             window_priv->msc_offset += new_msc - old_msc;
@@ -532,7 +532,7 @@ present_rootless_window_to_crtc_msc(WindowPtr window, RRCrtcPtr crtc, uint64_t w
 }
 
 static int
-present_rootless_present_pixmap(present_window_priv_ptr window_priv,
+present_winmode_present_pixmap(present_window_priv_ptr window_priv,
                         PixmapPtr pixmap,
                         CARD32 serial,
                         RegionPtr valid,
@@ -557,12 +557,12 @@ present_rootless_present_pixmap(present_window_priv_ptr window_priv,
     uint64_t                    crtc_msc = 0;
     present_vblank_ptr          vblank, tmp;
 
-    target_crtc = present_rootless_get_crtc(screen_priv, window);
+    target_crtc = present_winmode_get_crtc(screen_priv, window);
 
-    if (present_rootless_get_ust_msc(screen, window, &ust, &crtc_msc) == Success)
+    if (present_winmode_get_ust_msc(screen, window, &ust, &crtc_msc) == Success)
         window_priv->msc = crtc_msc;
 
-    target_msc = present_rootless_window_to_crtc_msc(window, target_crtc, window_msc, crtc_msc);
+    target_msc = present_winmode_window_to_crtc_msc(window, target_crtc, window_msc, crtc_msc);
 
     present_adjust_timings(options,
                            &crtc_msc,
@@ -587,7 +587,7 @@ present_rootless_present_pixmap(present_window_priv_ptr window_priv,
 
             present_scrap_obsolete_vblank(vblank);
             if (vblank->flip_ready)
-                present_rootless_re_execute(vblank);
+                present_winmode_re_execute(vblank);
         }
     }
 
@@ -612,18 +612,18 @@ present_rootless_present_pixmap(present_window_priv_ptr window_priv,
     xorg_list_append(&vblank->event_queue, &window_priv->exec_queue);
     vblank->queued = TRUE;
     if (crtc_msc < target_msc) {
-        if (present_rootless_queue_vblank(screen, window, target_crtc, vblank->event_id, target_msc) == Success) {
+        if (present_winmode_queue_vblank(screen, window, target_crtc, vblank->event_id, target_msc) == Success) {
             return Success;
         }
         DebugPresent(("present_queue_vblank failed\n"));
     }
 
-    present_rootless_execute(vblank, ust, crtc_msc);
+    present_winmode_execute(vblank, ust, crtc_msc);
     return Success;
 }
 
 static void
-present_rootless_flips_destroy(ScreenPtr screen)
+present_winmode_flips_destroy(ScreenPtr screen)
 {
     present_screen_priv_ptr screen_priv = present_screen_priv(screen);
     present_window_priv_ptr window_priv;
@@ -631,15 +631,15 @@ present_rootless_flips_destroy(ScreenPtr screen)
     xorg_list_for_each_entry(window_priv, &screen_priv->windows, screen_list) {
         /* Reset window pixmaps back to the original window pixmap */
         if (window_priv->flip_pending)
-            present_rootless_set_abort_flip(window_priv->window);
+            present_winmode_set_abort_flip(window_priv->window);
 
         /* Drop reference to any pending flip or unflip pixmaps. */
-        present_rootless_free_idle_vblanks(window_priv->window);
+        present_winmode_free_idle_vblanks(window_priv->window);
     }
 }
 
 static void
-present_rootless_abort_vblank(ScreenPtr screen, WindowPtr window, RRCrtcPtr crtc, uint64_t event_id, uint64_t msc)
+present_winmode_abort_vblank(ScreenPtr screen, WindowPtr window, RRCrtcPtr crtc, uint64_t event_id, uint64_t msc)
 {
     present_window_priv_ptr window_priv = present_window_priv(window);
     present_vblank_ptr      vblank;
@@ -649,7 +649,7 @@ present_rootless_abort_vblank(ScreenPtr screen, WindowPtr window, RRCrtcPtr crtc
     else {
         present_screen_priv_ptr screen_priv = present_screen_priv(screen);
 
-        (*screen_priv->rootless_info->abort_vblank) (window, crtc, event_id, msc);
+        (*screen_priv->winmode_info->abort_vblank) (window, crtc, event_id, msc);
     }
 
     xorg_list_for_each_entry(vblank, &window_priv->exec_queue, event_queue) {
@@ -672,17 +672,17 @@ present_rootless_abort_vblank(ScreenPtr screen, WindowPtr window, RRCrtcPtr crtc
 }
 
 void
-present_rootless_init_rootless(present_screen_priv_ptr screen_priv)
+present_winmode_init_winmode(present_screen_priv_ptr screen_priv)
 {
-    screen_priv->check_flip_window = &present_rootless_check_flip_window;
-    screen_priv->create_event_id = &present_rootless_create_event_id;
-    screen_priv->present_pixmap = &present_rootless_present_pixmap;
-    screen_priv->flips_destroy = &present_rootless_flips_destroy;
-    screen_priv->re_execute = &present_rootless_re_execute;
-    screen_priv->queue_vblank = &present_rootless_queue_vblank;
-    screen_priv->get_crtc = &present_rootless_get_crtc;
-    screen_priv->query_capabilities = &present_rootless_query_capabilities;
-    screen_priv->check_flip = &present_rootless_check_flip;
-    screen_priv->abort_vblank = &present_rootless_abort_vblank;
-    screen_priv->flush = &present_rootless_flush;
+    screen_priv->check_flip_window = &present_winmode_check_flip_window;
+    screen_priv->create_event_id = &present_winmode_create_event_id;
+    screen_priv->present_pixmap = &present_winmode_present_pixmap;
+    screen_priv->flips_destroy = &present_winmode_flips_destroy;
+    screen_priv->re_execute = &present_winmode_re_execute;
+    screen_priv->queue_vblank = &present_winmode_queue_vblank;
+    screen_priv->get_crtc = &present_winmode_get_crtc;
+    screen_priv->query_capabilities = &present_winmode_query_capabilities;
+    screen_priv->check_flip = &present_winmode_check_flip;
+    screen_priv->abort_vblank = &present_winmode_abort_vblank;
+    screen_priv->flush = &present_winmode_flush;
 }

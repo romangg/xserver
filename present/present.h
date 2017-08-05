@@ -37,7 +37,7 @@ typedef RRCrtcPtr (*present_get_crtc_ptr) (WindowPtr window);
  */
 typedef int (*present_get_ust_msc_ptr) (RRCrtcPtr crtc, uint64_t *ust, uint64_t *msc);
 
-typedef int (*present_get_ust_msc_rootless_ptr) (WindowPtr window, uint64_t *ust, uint64_t *msc);
+typedef int (*present_get_ust_msc_winmode_ptr) (WindowPtr window, uint64_t *ust, uint64_t *msc);
 
 /* Queue callback on 'crtc' for time 'msc'. Call present_event_notify with 'event_id'
  * at or after 'msc'. Return false if it didn't happen (which might occur if 'crtc'
@@ -46,7 +46,7 @@ typedef int (*present_get_ust_msc_rootless_ptr) (WindowPtr window, uint64_t *ust
 typedef Bool (*present_queue_vblank_ptr) (RRCrtcPtr crtc,
                                           uint64_t event_id,
                                           uint64_t msc);
-typedef Bool (*present_queue_vblank_rootless_ptr) (WindowPtr window,
+typedef Bool (*present_queue_vblank_winmode_ptr) (WindowPtr window,
                                                    RRCrtcPtr crtc,
                                           uint64_t event_id,
                                           uint64_t msc);
@@ -57,7 +57,7 @@ typedef Bool (*present_queue_vblank_rootless_ptr) (WindowPtr window,
  */
 typedef void (*present_abort_vblank_ptr) (RRCrtcPtr crtc, uint64_t event_id, uint64_t msc);
 
-typedef void (*present_abort_vblank_rootless_ptr) (WindowPtr window, RRCrtcPtr crtc, uint64_t event_id, uint64_t msc);
+typedef void (*present_abort_vblank_winmode_ptr) (WindowPtr window, RRCrtcPtr crtc, uint64_t event_id, uint64_t msc);
 
 /* Flush pending drawing on 'window' to the hardware.
  */
@@ -91,7 +91,7 @@ typedef Bool (*present_flip_ptr) (RRCrtcPtr crtc,
  * 'window' is to be used for any necessary synchronization.
  *
  */
-typedef Bool (*present_flip_rootless_ptr) (WindowPtr window,
+typedef Bool (*present_flip_winmode_ptr) (WindowPtr window,
                                            RRCrtcPtr crtc,
                                            uint64_t event_id,
                                            uint64_t target_msc,
@@ -115,7 +115,7 @@ typedef void (*present_unflip_ptr) (ScreenPtr screen,
  *
  * present_event_notify should be called with 'event_id' when the unflip occurs.
  */
-typedef void (*present_unflip_rootless_ptr) (WindowPtr window,
+typedef void (*present_unflip_winmode_ptr) (WindowPtr window,
                                     uint64_t event_id);
 
 #define PRESENT_SCREEN_INFO_VERSION         0
@@ -135,21 +135,21 @@ typedef struct present_screen_info {
     present_unflip_ptr                  unflip;
 } present_screen_info_rec, *present_screen_info_ptr;
 
-typedef struct present_rootless_screen_info {
+typedef struct present_winmode_screen_info {
     uint32_t                            version;
 
     present_get_crtc_ptr                get_crtc;
-    present_get_ust_msc_rootless_ptr    get_ust_msc;
-    present_queue_vblank_rootless_ptr   queue_vblank;
-    present_abort_vblank_rootless_ptr   abort_vblank;
+    present_get_ust_msc_winmode_ptr    get_ust_msc;
+    present_queue_vblank_winmode_ptr   queue_vblank;
+    present_abort_vblank_winmode_ptr   abort_vblank;
     present_flush_ptr                   flush;
     uint32_t                            capabilities;
     present_check_flip_ptr              check_flip;
-    present_flip_rootless_ptr           flip;
+    present_flip_winmode_ptr           flip;
     present_flip_executed_ptr           flip_executed;
-    present_unflip_rootless_ptr         unflip;
+    present_unflip_winmode_ptr         unflip;
 
-} present_rootless_screen_info_rec, *present_rootless_screen_info_ptr;
+} present_winmode_screen_info_rec, *present_winmode_screen_info_ptr;
 
 /*
  * Called when 'event_id' occurs. 'ust' and 'msc' indicate when the
@@ -163,7 +163,7 @@ present_event_notify(uint64_t event_id, uint64_t ust, uint64_t msc);
  * 'ust' and 'msc' indicate when the event actually happened
  */
 extern _X_EXPORT void
-present_rootless_event_notify(WindowPtr window, uint64_t event_id, uint64_t ust, uint64_t msc);
+present_winmode_event_notify(WindowPtr window, uint64_t event_id, uint64_t ust, uint64_t msc);
 
 /* 'crtc' has been turned off, so any pending events will never occur.
  */
@@ -174,7 +174,7 @@ extern _X_EXPORT Bool
 present_screen_init(ScreenPtr screen, present_screen_info_ptr info);
 
 extern _X_EXPORT Bool
-present_rootless_screen_init(ScreenPtr screen, present_rootless_screen_info_ptr info);
+present_winmode_screen_init(ScreenPtr screen, present_winmode_screen_info_ptr info);
 
 typedef void (*present_complete_notify_proc)(WindowPtr window,
                                              CARD8 kind,

@@ -110,7 +110,7 @@ typedef struct present_window_priv {
     struct xorg_list       idle_vblank;
     struct xorg_list       notifies;
 
-    /* Below for rootless mode */
+    /* Below for winmode mode */
     uint64_t         event_id;
     struct xorg_list exec_queue;
     struct xorg_list flip_queue;
@@ -188,7 +188,7 @@ struct present_screen_priv {
     Bool                        flip_sync;
 
     present_screen_info_ptr             info;
-    present_rootless_screen_info_ptr    rootless_info;
+    present_winmode_screen_info_ptr    winmode_info;
 
 
     /* internal fct pointer */
@@ -265,7 +265,7 @@ void
 present_vblank_destroy(present_vblank_ptr vblank);
 
 void
-present_rootless_set_abort_flip(WindowPtr window);
+present_winmode_set_abort_flip(WindowPtr window);
 
 void
 present_check_flip_window(WindowPtr window);
@@ -346,16 +346,16 @@ void
 present_scrmode_init_scrmode(present_screen_priv_ptr screen_priv);
 
 /*
- * present_rootless.c
+ * present_winmode.c
  */
 void
-present_rootless_free_idle_vblanks(WindowPtr window);
+present_winmode_free_idle_vblanks(WindowPtr window);
 
 void
-present_rootless_restore_window_pixmap(WindowPtr window);
+present_winmode_restore_window_pixmap(WindowPtr window);
 
 void
-present_rootless_init_rootless(present_screen_priv_ptr screen_priv);
+present_winmode_init_winmode(present_screen_priv_ptr screen_priv);
 
 /*
  * present_event.c

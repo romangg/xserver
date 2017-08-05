@@ -119,7 +119,7 @@ present_clear_window_flip(WindowPtr window)
 }
 
 static void
-present_clear_window_flip_rootless(WindowPtr window)
+present_clear_window_flip_winmode(WindowPtr window)
 {
     present_vblank_ptr          flip_pending;
     present_window_priv_ptr window_priv = present_window_priv(window);
@@ -127,13 +127,13 @@ present_clear_window_flip_rootless(WindowPtr window)
     flip_pending = window_priv->flip_pending;
 
     if (flip_pending) {
-        present_rootless_set_abort_flip(window);
+        present_winmode_set_abort_flip(window);
         flip_pending->window = NULL;
     }
     /* we clear the active flip in free_window_vblank_idle */
     if (window_priv->restore_pixmap)
-        present_rootless_restore_window_pixmap(window);
-    present_rootless_free_idle_vblanks(window);
+        present_winmode_restore_window_pixmap(window);
+    present_winmode_free_idle_vblanks(window);
 }
 
 /*
@@ -153,8 +153,8 @@ present_destroy_window(WindowPtr window)
         present_free_window_vblank(window);
 
 
-        if (screen_priv->rootless_info)
-            present_clear_window_flip_rootless(window); //TODOX: fct ptr?
+        if (screen_priv->winmode_info)
+            present_clear_window_flip_winmode(window); //TODOX: fct ptr?
         else
             present_clear_window_flip(window);
 
@@ -257,20 +257,20 @@ present_screen_init(ScreenPtr screen, present_screen_info_ptr info)
 }
 
 /*
- * Initialize a screen for use with present in rootless mode
+ * Initialize a screen for use with present in window mode
  */
 int
-present_rootless_screen_init(ScreenPtr screen, present_rootless_screen_info_ptr info)
+present_winmode_screen_init(ScreenPtr screen, present_winmode_screen_info_ptr info)
 {
     if (!present_screen_priv(screen)) {
         present_screen_priv_ptr screen_priv = present_screen_priv_init(screen);
         if (!screen_priv)
             return FALSE;
 
-        screen_priv->rootless_info = info;
-        present_rootless_init_rootless(screen_priv);
+        screen_priv->winmode_info = info;
+        present_winmode_init_winmode(screen_priv);
 
-        present_fake_screen_init(screen);   //TODOX: not needed in rootless?
+        present_fake_screen_init(screen);   //TODOX: not needed in winmode?
     }
 
     return TRUE;
