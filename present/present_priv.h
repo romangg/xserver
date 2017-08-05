@@ -35,6 +35,12 @@
 #include <xfixes.h>
 #include <randrstr.h>
 
+#if 0
+#define DebugPresent(x) ErrorF x
+#else
+#define DebugPresent(x)
+#endif
+
 extern int present_request;
 
 extern DevPrivateKeyRec present_screen_private_key;

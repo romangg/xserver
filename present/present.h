@@ -76,11 +76,25 @@ typedef Bool (*present_flip_ptr) (RRCrtcPtr crtc,
                                   PixmapPtr pixmap,
                                   Bool sync_flip);
 
+/* Flip pixmap for window, return false if it didn't happen.
+ *
+ * Like present_flip_ptr, additionaly with:
+ *
+ * 'window' is to be used for any necessary synchronization.
+ *
+ */
+typedef Bool (*present_flip_rootless_ptr) (WindowPtr window,
+                                           RRCrtcPtr crtc,
+                                           uint64_t event_id,
+                                           uint64_t target_msc,
+                                           PixmapPtr pixmap,
+                                           Bool sync_flip);
+
 /* Called when the flip with id 'flip_event_id' has been fully processed internally,
  * and the Extension is waiting with regards to this flip for the information,
  * that the flips isn't pending anymore.
  */
-typedef void (*present_flip_executed_ptr) (RRCrtcPtr crtc, uint64_t flip_event_id, RegionPtr damage);
+typedef void (*present_flip_executed_ptr) (WindowPtr window, RRCrtcPtr crtc, uint64_t flip_event_id, RegionPtr damage);
 
 /* "unflip" back to the regular screen scanout buffer
  *
@@ -109,6 +123,7 @@ typedef struct present_screen_info {
     uint32_t                            capabilities;
     present_check_flip_ptr              check_flip;
     present_flip_ptr                    flip;
+    present_flip_rootless_ptr           flip_rootless;
     present_flip_executed_ptr           flip_executed;
     present_unflip_ptr                  unflip;
     present_unflip_rootless_ptr         unflip_rootless;
