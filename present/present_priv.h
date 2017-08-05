@@ -49,6 +49,8 @@ typedef struct present_fence *present_fence_ptr;
 
 typedef struct present_notify present_notify_rec, *present_notify_ptr;
 
+typedef struct present_screen_priv present_screen_priv_rec, *present_screen_priv_ptr;
+
 struct present_notify {
     struct xorg_list    window_list;
     WindowPtr           window;
@@ -120,7 +122,7 @@ typedef struct present_window_priv {
     uint64_t                unflip_event_id;
 } present_window_priv_rec, *present_window_priv_ptr;
 
-typedef int (*present_pixmap_ptr) (present_window_priv_ptr window,
+typedef int (*present_priv_present_pixmap_ptr) (present_window_priv_ptr window,
                                    PixmapPtr pixmap,
                                    CARD32 serial,
                                    RegionPtr valid,
@@ -137,7 +139,25 @@ typedef int (*present_pixmap_ptr) (present_window_priv_ptr window,
                                    present_notify_ptr notifies,
                                    int num_notifies);
 
-typedef struct present_screen_priv {
+typedef Bool (*present_priv_check_flip_ptr)(RRCrtcPtr    crtc,
+                                                   WindowPtr    window,
+                                                   PixmapPtr    pixmap,
+                                                   Bool         sync_flip,
+                                                   RegionPtr    valid,
+                                                   int16_t      x_off,
+                                                   int16_t      y_off);
+typedef void (*present_priv_check_flip_window_ptr)(WindowPtr window);
+typedef void (*present_priv_flips_destroy_ptr)(ScreenPtr screen);
+typedef void (*present_priv_create_event_id_ptr)(present_window_priv_ptr window_priv, present_vblank_ptr vblank);
+typedef void (*present_priv_re_execute_ptr)(present_vblank_ptr vblank);
+typedef int (*present_priv_queue_vblank_ptr)(ScreenPtr screen,
+                                 void* target,
+                                 uint64_t event_id,
+                                 uint64_t msc);
+typedef RRCrtcPtr (*present_priv_get_crtc_ptr)(present_screen_priv_ptr screen_priv, WindowPtr window);
+typedef uint32_t (*present_priv_query_capabilities_ptr)(present_screen_priv_ptr screen_priv);
+
+struct present_screen_priv {
     CloseScreenProcPtr          CloseScreen;
     ConfigNotifyProcPtr         ConfigNotify;
     DestroyWindowProcPtr        DestroyWindow;
@@ -161,8 +181,20 @@ typedef struct present_screen_priv {
     present_screen_info_ptr             info;
     present_rootless_screen_info_ptr    rootless_info;
 
-    present_pixmap_ptr         present_pixmap;
-} present_screen_priv_rec, *present_screen_priv_ptr;
+
+    /* internal fct pointer */
+    present_priv_check_flip_window_ptr  check_flip_window;
+    present_priv_create_event_id_ptr    create_event_id;
+    present_priv_present_pixmap_ptr     present_pixmap;
+    present_priv_flips_destroy_ptr      flips_destroy;
+    present_priv_re_execute_ptr         re_execute;
+    present_priv_queue_vblank_ptr       queue_vblank;
+    present_priv_get_crtc_ptr           get_crtc;
+    present_priv_query_capabilities_ptr query_capabilities;
+    present_priv_check_flip_ptr         check_flip;
+
+
+};
 
 #define wrap(priv,real,mem,func) {\
     priv->mem = real->mem; \
@@ -249,13 +281,13 @@ void
 present_flips_destroy(ScreenPtr screen);
 
 void
-present_restore_screen_pixmap(ScreenPtr screen);
+present_scrmd_restore_screen_pixmap(ScreenPtr screen);  // TODOX: as fct ptr in screen_priv instead?
 
 void
-present_restore_window_pixmap_only(WindowPtr window);
+present_rootless_restore_window_pixmap(WindowPtr window);   //
 
 void
-present_set_abort_flip(ScreenPtr screen);
+present_scrmd_set_abort_flip(ScreenPtr screen);
 
 void
 present_rootless_set_abort_flip(WindowPtr window);
@@ -326,6 +358,13 @@ present_pixmap_idle(PixmapPtr pixmap, WindowPtr window, CARD32 serial, struct pr
 
 void
 present_vblank_notify(present_vblank_ptr vblank, CARD8 kind, CARD8 mode, uint64_t ust, uint64_t crtc_msc);
+
+void
+present_copy_region(DrawablePtr drawable,
+                    PixmapPtr pixmap,
+                    RegionPtr update,
+                    int16_t x_off,
+                    int16_t y_off);
 
 /*
  * present_rootless.c

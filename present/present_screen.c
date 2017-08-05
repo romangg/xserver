@@ -63,7 +63,7 @@ present_close_screen(ScreenPtr screen)
 {
     present_screen_priv_ptr screen_priv = present_screen_priv(screen);
 
-    present_flips_destroy(screen);
+    screen_priv->flips_destroy(screen);
 
     unwrap(screen_priv, screen, CloseScreen);
     (*screen->CloseScreen) (screen);
@@ -99,11 +99,11 @@ present_clear_window_flip(WindowPtr window)
     flip_pending = screen_priv->flip_pending;
 
     if (flip_pending && flip_pending->window == window) {
-        present_set_abort_flip(screen);
+        present_scrmd_set_abort_flip(screen);
         flip_pending->window = NULL;
     }
     if (screen_priv->flip_window == window) {
-        present_restore_screen_pixmap(screen);
+        present_scrmd_restore_screen_pixmap(screen);
         screen_priv->flip_window = NULL;
     }
 }
@@ -122,7 +122,7 @@ present_clear_window_flip_rootless(WindowPtr window)
     }
     /* we clear the active flip in free_window_vblank_idle */
     if (window_priv->restore_pixmap)
-        present_restore_window_pixmap_only(window);
+        present_rootless_restore_window_pixmap(window);
     present_rootless_free_idle_vblanks(window);
 }
 
@@ -192,7 +192,7 @@ present_clip_notify(WindowPtr window, int dx, int dy)
     ScreenPtr screen = window->drawable.pScreen;
     present_screen_priv_ptr screen_priv = present_screen_priv(screen);
 
-    present_check_flip_window(window);
+    screen_priv->check_flip_window(window);
     unwrap(screen_priv, screen, ClipNotify)
     if (screen->ClipNotify)
         screen->ClipNotify (window, dx, dy);

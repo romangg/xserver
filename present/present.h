@@ -37,11 +37,16 @@ typedef RRCrtcPtr (*present_get_crtc_ptr) (WindowPtr window);
  */
 typedef int (*present_get_ust_msc_ptr) (RRCrtcPtr crtc, uint64_t *ust, uint64_t *msc);
 
+typedef int (*present_get_ust_msc_rootless_ptr) (WindowPtr window, uint64_t *ust, uint64_t *msc);
+
 /* Queue callback on 'crtc' for time 'msc'. Call present_event_notify with 'event_id'
  * at or after 'msc'. Return false if it didn't happen (which might occur if 'crtc'
  * is not currently generating vblanks).
  */
 typedef Bool (*present_queue_vblank_ptr) (RRCrtcPtr crtc,
+                                          uint64_t event_id,
+                                          uint64_t msc);
+typedef Bool (*present_queue_vblank_rootless_ptr) (WindowPtr window,
                                           uint64_t event_id,
                                           uint64_t msc);
 
@@ -130,9 +135,9 @@ typedef struct present_screen_info {
 typedef struct present_rootless_screen_info {
     uint32_t                            version;
 
-//    present_get_crtc_ptr                get_crtc;
-    present_get_ust_msc_ptr             get_ust_msc;
-    present_queue_vblank_ptr            queue_vblank;
+    present_get_crtc_ptr                get_crtc;
+    present_get_ust_msc_rootless_ptr    get_ust_msc;
+    present_queue_vblank_rootless_ptr            queue_vblank;
     present_abort_vblank_ptr            abort_vblank;
     present_flush_ptr                   flush;
     uint32_t                            capabilities;
