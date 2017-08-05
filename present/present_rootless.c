@@ -43,7 +43,7 @@ present_rootless_get_ust_msc(ScreenPtr screen, WindowPtr window, uint64_t *ust, 
     if (ret == Success)
         return ret;
     else
-        return present_fake_get_ust_msc(screen, ust, msc);  // TODOX: fake counters per window?
+        return present_fake_get_ust_msc(screen, ust, msc);
 
 }
 
@@ -148,13 +148,12 @@ present_rootless_queue_vblank(ScreenPtr screen,
                               uint64_t msc)
 {
     Bool ret;
-//    if (crtc == NULL)
-//        ret = present_fake_queue_vblank(screen, event_id, msc);
-//    else
-//    {
+    if (crtc == NULL)
+        ret = present_fake_queue_vblank(screen, window, event_id, msc);
+    else {
         present_screen_priv_ptr     screen_priv = present_screen_priv(screen);
-        ret = (*screen_priv->rootless_info->queue_vblank) (window, event_id, msc);  // TODOX: also submit crtc?
-//    }
+        ret = (*screen_priv->rootless_info->queue_vblank) (window, crtc, event_id, msc);
+    }
     return ret;
 }
 
@@ -646,7 +645,7 @@ present_rootless_abort_vblank(ScreenPtr screen, WindowPtr window, RRCrtcPtr crtc
     present_vblank_ptr      vblank;
 
     if (crtc == NULL)
-        present_fake_abort_vblank(screen, event_id, msc);
+        present_fake_abort_vblank(screen, window, event_id, msc);
     else {
         present_screen_priv_ptr screen_priv = present_screen_priv(screen);
 

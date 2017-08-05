@@ -116,6 +116,8 @@ typedef struct present_window_priv {
     struct xorg_list flip_queue;
     struct xorg_list idle_queue;
 
+    struct xorg_list fake_vblank_queue;
+
     PixmapPtr               restore_pixmap;
     present_vblank_ptr      flip_pending;
     present_vblank_ptr      flip_active;
@@ -387,10 +389,10 @@ int
 present_fake_get_ust_msc(ScreenPtr screen, uint64_t *ust, uint64_t *msc);
 
 int
-present_fake_queue_vblank(ScreenPtr screen, uint64_t event_id, uint64_t msc);
+present_fake_queue_vblank(ScreenPtr screen, WindowPtr window, uint64_t event_id, uint64_t msc);
 
 void
-present_fake_abort_vblank(ScreenPtr screen, uint64_t event_id, uint64_t msc);
+present_fake_abort_vblank(ScreenPtr screen, WindowPtr window, uint64_t event_id, uint64_t msc);
 
 void
 present_fake_screen_init(ScreenPtr screen);

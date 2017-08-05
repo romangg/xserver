@@ -34,6 +34,7 @@ typedef struct present_fake_vblank {
     uint64_t                    event_id;
     OsTimerPtr                  timer;
     ScreenPtr                   screen;
+    WindowPtr                   window;
 } present_fake_vblank_rec, *present_fake_vblank_ptr;
 
 int
@@ -70,22 +71,43 @@ present_fake_do_timer(OsTimerPtr timer,
 }
 
 void
-present_fake_abort_vblank(ScreenPtr screen, uint64_t event_id, uint64_t msc)
+present_fake_abort_vblank(ScreenPtr screen, WindowPtr window, uint64_t event_id, uint64_t msc)
 {
+    present_window_priv_ptr     window_priv;
     present_fake_vblank_ptr     fake_vblank, tmp;
+    Bool                        hit = FALSE;
 
-    xorg_list_for_each_entry_safe(fake_vblank, tmp, &fake_vblank_queue, list) {
-        if (fake_vblank->event_id == event_id) {
-            TimerFree(fake_vblank->timer); /* TimerFree will call TimerCancel() */
-            xorg_list_del(&fake_vblank->list);
-            free (fake_vblank);
-            break;
+    if (window) {
+        window_priv = present_window_priv(window);
+
+        if (window_priv) {
+            xorg_list_for_each_entry_safe(fake_vblank, tmp, &window_priv->fake_vblank_queue, list) {
+                /* For cleanup run through all elements with event_id == 0 */
+                if (!event_id || fake_vblank->event_id == event_id) {
+                    hit = TRUE;
+                    TimerFree(fake_vblank->timer); /* TimerFree will call TimerCancel() */
+                    xorg_list_del(&fake_vblank->list);
+                    free (fake_vblank);
+                }
+            }
+        }
+    }
+
+    if (!hit) {
+        xorg_list_for_each_entry_safe(fake_vblank, tmp, &fake_vblank_queue, list) {
+            if (fake_vblank->event_id == event_id && fake_vblank->window == window) {
+                TimerFree(fake_vblank->timer); /* TimerFree will call TimerCancel() */
+                xorg_list_del(&fake_vblank->list);
+                free (fake_vblank);
+                break;
+            }
         }
     }
 }
 
 int
 present_fake_queue_vblank(ScreenPtr     screen,
+                          WindowPtr     window,
                           uint64_t      event_id,
                           uint64_t      msc)
 {
@@ -110,6 +132,14 @@ present_fake_queue_vblank(ScreenPtr     screen,
     if (!fake_vblank->timer) {
         free(fake_vblank);
         return BadAlloc;
+    }
+
+    if (window) {
+        present_window_priv_ptr window_priv = present_window_priv(window);
+        if (window_priv) {
+            xorg_list_add(&fake_vblank->list, &window_priv->fake_vblank_queue);
+            return Success;
+        }
     }
 
     xorg_list_add(&fake_vblank->list, &fake_vblank_queue);

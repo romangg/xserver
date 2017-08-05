@@ -87,6 +87,9 @@ present_free_window_vblank(WindowPtr window)
     present_window_priv_ptr     window_priv = present_window_priv(window);
     present_vblank_ptr          vblank, tmp;
 
+    /* Clear up any fake vblanks */
+    present_fake_abort_vblank(screen, window, 0, 0);
+
     xorg_list_for_each_entry_safe(vblank, tmp, &window_priv->vblank, window_list) {
         screen_priv->abort_vblank(screen, window, vblank->crtc, vblank->event_id, vblank->target_msc);
         present_vblank_destroy(vblank);
@@ -148,6 +151,7 @@ present_destroy_window(WindowPtr window)
         present_clear_window_notifies(window);
         present_free_events(window);
         present_free_window_vblank(window);
+
 
         if (screen_priv->rootless_info)
             present_clear_window_flip_rootless(window); //TODOX: fct ptr?

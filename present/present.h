@@ -47,6 +47,7 @@ typedef Bool (*present_queue_vblank_ptr) (RRCrtcPtr crtc,
                                           uint64_t event_id,
                                           uint64_t msc);
 typedef Bool (*present_queue_vblank_rootless_ptr) (WindowPtr window,
+                                                   RRCrtcPtr crtc,
                                           uint64_t event_id,
                                           uint64_t msc);
 

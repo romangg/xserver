@@ -178,7 +178,7 @@ present_scrmode_queue_vblank(ScreenPtr screen,
     Bool                        ret;
 
     if (crtc == NULL)
-        ret = present_fake_queue_vblank(screen, event_id, msc);
+        ret = present_fake_queue_vblank(screen, NULL, event_id, msc);
     else
     {
         present_screen_priv_ptr     screen_priv = present_screen_priv(screen);
@@ -716,7 +716,7 @@ present_scrmode_abort_vblank(ScreenPtr screen, WindowPtr window, RRCrtcPtr crtc,
     present_vblank_ptr  vblank;
 
     if (crtc == NULL)
-        present_fake_abort_vblank(screen, event_id, msc);
+        present_fake_abort_vblank(screen, NULL, event_id, msc);
     else
     {
         present_screen_priv_ptr     screen_priv = present_screen_priv(screen);
