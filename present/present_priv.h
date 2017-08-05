@@ -230,7 +230,6 @@ present_get_window_priv(WindowPtr window, Bool create);
 /*
  * present.c
  */
-
 int
 present_pixmap(WindowPtr window,
                    PixmapPtr pixmap,
@@ -260,18 +259,6 @@ void
 present_vblank_destroy(present_vblank_ptr vblank);
 
 void
-present_flips_destroy(ScreenPtr screen);
-
-void
-present_scrmode_restore_screen_pixmap(ScreenPtr screen);  // TODOX: as fct ptr in screen_priv instead?
-
-void
-present_rootless_restore_window_pixmap(WindowPtr window);   //
-
-void
-present_scrmode_set_abort_flip(ScreenPtr screen);
-
-void
 present_rootless_set_abort_flip(WindowPtr window);
 
 void
@@ -285,9 +272,6 @@ present_query_capabilities(RRCrtcPtr crtc);
 
 Bool
 present_init(void);
-
-void
-present_scrmode_init_scrmode(present_screen_priv_ptr screen_priv);
 
 present_vblank_ptr
 present_create_vblank(present_window_priv_ptr window_priv,
@@ -344,13 +328,25 @@ present_copy_region(DrawablePtr drawable,
                     int16_t y_off);
 
 /*
+ * present_scrmode.c
+ */
+void
+present_scrmode_restore_screen_pixmap(ScreenPtr screen);  // TODOX: as fct ptr in screen_priv instead?
+
+void
+present_scrmode_set_abort_flip(ScreenPtr screen);
+
+void
+present_scrmode_init_scrmode(present_screen_priv_ptr screen_priv);
+
+/*
  * present_rootless.c
  */
 void
-present_rootless_check_flip_window (WindowPtr window);
+present_rootless_free_idle_vblanks(WindowPtr window);
 
 void
-present_rootless_free_idle_vblanks(WindowPtr window);
+present_rootless_restore_window_pixmap(WindowPtr window);
 
 void
 present_rootless_init_rootless(present_screen_priv_ptr screen_priv);

@@ -340,7 +340,7 @@ present_rootless_check_flip(RRCrtcPtr    crtc,
  * 'window' is being reconfigured. Check to see if it is involved
  * in flipping and clean up as necessary
  */
-void
+static void
 present_rootless_check_flip_window (WindowPtr window)
 {
     present_window_priv_ptr     window_priv = present_window_priv(window);
