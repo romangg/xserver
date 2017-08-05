@@ -56,7 +56,7 @@ typedef Bool (*present_queue_vblank_rootless_ptr) (WindowPtr window,
  */
 typedef void (*present_abort_vblank_ptr) (RRCrtcPtr crtc, uint64_t event_id, uint64_t msc);
 
-typedef void (*present_abort_vblank_rootless_ptr) (WindowPtr window, uint64_t event_id, uint64_t msc);
+typedef void (*present_abort_vblank_rootless_ptr) (WindowPtr window, RRCrtcPtr crtc, uint64_t event_id, uint64_t msc);
 
 /* Flush pending drawing on 'window' to the hardware.
  */

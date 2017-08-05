@@ -139,13 +139,13 @@ typedef int (*present_priv_pixmap_ptr) (present_window_priv_ptr window,
                                    present_notify_ptr notifies,
                                    int num_notifies);
 
-typedef Bool (*present_priv_check_flip_ptr)(RRCrtcPtr    crtc,
-                                                   WindowPtr    window,
-                                                   PixmapPtr    pixmap,
-                                                   Bool         sync_flip,
-                                                   RegionPtr    valid,
-                                                   int16_t      x_off,
-                                                   int16_t      y_off);
+typedef Bool (*present_priv_check_flip_ptr)(RRCrtcPtr crtc,
+                                                   WindowPtr window,
+                                                   PixmapPtr pixmap,
+                                                   Bool sync_flip,
+                                                   RegionPtr valid,
+                                                   int16_t x_off,
+                                                   int16_t y_off);
 typedef void (*present_priv_check_flip_window_ptr)(WindowPtr window);
 typedef void (*present_priv_flips_destroy_ptr)(ScreenPtr screen);
 typedef void (*present_priv_create_event_id_ptr)(present_window_priv_ptr window_priv, present_vblank_ptr vblank);
@@ -157,7 +157,11 @@ typedef int (*present_priv_queue_vblank_ptr)(ScreenPtr screen,
                                              uint64_t msc);
 typedef RRCrtcPtr (*present_priv_get_crtc_ptr)(present_screen_priv_ptr screen_priv, WindowPtr window);
 typedef uint32_t (*present_priv_query_capabilities_ptr)(present_screen_priv_ptr screen_priv);
-typedef void (*present_priv_abort_vblank_ptr)(ScreenPtr screen, void *target, uint64_t event_id, uint64_t msc);
+typedef void (*present_priv_abort_vblank_ptr)(ScreenPtr screen,
+                                              WindowPtr window,
+                                              RRCrtcPtr crtc,
+                                              uint64_t event_id,
+                                              uint64_t msc);
 typedef void (*present_priv_flush_ptr)(WindowPtr window);
 
 struct present_screen_priv {

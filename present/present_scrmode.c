@@ -711,9 +711,8 @@ present_scrmode_flip_destroy(ScreenPtr screen)
 }
 
 static void
-present_scrmode_abort_vblank(ScreenPtr screen, void* target, uint64_t event_id, uint64_t msc)
+present_scrmode_abort_vblank(ScreenPtr screen, WindowPtr window, RRCrtcPtr crtc, uint64_t event_id, uint64_t msc)
 {
-    RRCrtcPtr crtc = target;
     present_vblank_ptr  vblank;
 
     if (crtc == NULL)

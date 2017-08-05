@@ -640,20 +640,18 @@ present_rootless_flips_destroy(ScreenPtr screen)
 }
 
 static void
-present_rootless_abort_vblank(ScreenPtr screen, void* target, uint64_t event_id, uint64_t msc)
+present_rootless_abort_vblank(ScreenPtr screen, WindowPtr window, RRCrtcPtr crtc, uint64_t event_id, uint64_t msc)
 {
-    WindowPtr               window = target;
     present_window_priv_ptr window_priv = present_window_priv(window);
     present_vblank_ptr      vblank;
 
-//    if (window == NULL)
-//        present_fake_abort_vblank(screen, event_id, msc);
-//    else
-//    {
-        present_screen_priv_ptr     screen_priv = present_screen_priv(screen);
+    if (crtc == NULL)
+        present_fake_abort_vblank(screen, event_id, msc);
+    else {
+        present_screen_priv_ptr screen_priv = present_screen_priv(screen);
 
-        (*screen_priv->rootless_info->abort_vblank) (window, event_id, msc);
-//    }
+        (*screen_priv->rootless_info->abort_vblank) (window, crtc, event_id, msc);
+    }
 
     xorg_list_for_each_entry(vblank, &window_priv->exec_queue, event_queue) {
         int64_t match = event_id - vblank->event_id;
