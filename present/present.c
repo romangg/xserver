@@ -273,7 +273,7 @@ present_execute_wait(present_vblank_ptr vblank, uint64_t crtc_msc)
     return TRUE;
 }
 
-Bool    //TODOX: return def value instead?
+void
 present_execute_flip_recover(present_vblank_ptr vblank, uint64_t crtc_msc)
 {
     WindowPtr                   window = vblank->window;
@@ -286,11 +286,8 @@ present_execute_flip_recover(present_vblank_ptr vblank, uint64_t crtc_msc)
                                              vblank->crtc,
                                              vblank->event_id,
                                              vblank->target_msc)) {
-        xorg_list_add(&vblank->event_queue, &present_exec_queue);   //TOOX: in window queue!
-        xorg_list_append(&vblank->window_list,
-                         &present_get_window_priv(window, TRUE)->vblank);
         vblank->queued = TRUE;
-        return FALSE;
+        return;
     }
 
     present_copy_region(&window->drawable, vblank->pixmap, vblank->update, vblank->x_off, vblank->y_off);
@@ -302,8 +299,6 @@ present_execute_flip_recover(present_vblank_ptr vblank, uint64_t crtc_msc)
     present_flush(window);
 
     present_pixmap_idle(vblank->pixmap, vblank->window, vblank->serial, vblank->idle_fence);
-
-    return TRUE;
 }
 
 void

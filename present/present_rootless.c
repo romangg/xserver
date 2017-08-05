@@ -479,8 +479,13 @@ present_rootless_execute(present_vblank_ptr vblank, uint64_t ust, uint64_t crtc_
         else if (!window_priv->unflip_event_id && window_priv->flip_active)
             present_rootless_unflip(window);
 
-        if (!present_execute_flip_recover(vblank, crtc_msc))
+        present_execute_flip_recover(vblank, crtc_msc);
+        if (vblank->queued) {
+            xorg_list_add(&vblank->event_queue, &window_priv->exec_queue);
+            xorg_list_append(&vblank->window_list, &window_priv->vblank);
+
             return;
+        }
     }
 
     present_execute_complete(vblank, ust, crtc_msc);

@@ -343,7 +343,7 @@ present_timings(present_window_priv_ptr window_priv,
 void
 present_execute_complete(present_vblank_ptr vblank, uint64_t ust, uint64_t crtc_msc);
 
-Bool
+void
 present_execute_flip_recover(present_vblank_ptr vblank, uint64_t crtc_msc);
 
 void
