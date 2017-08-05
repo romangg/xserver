@@ -238,12 +238,6 @@ present_screen_priv_init(ScreenPtr screen)
 int
 present_screen_init(ScreenPtr screen, present_screen_info_ptr info)
 {
-    if (!dixRegisterPrivateKey(&present_screen_private_key, PRIVATE_SCREEN, 0))
-        return FALSE;
-
-    if (!dixRegisterPrivateKey(&present_window_private_key, PRIVATE_WINDOW, 0))
-        return FALSE;
-
     if (!present_screen_priv(screen)) {
         present_screen_priv_ptr screen_priv = present_screen_priv_init(screen);
         if (!screen_priv)
@@ -264,12 +258,6 @@ present_screen_init(ScreenPtr screen, present_screen_info_ptr info)
 int
 present_rootless_screen_init(ScreenPtr screen, present_rootless_screen_info_ptr info)
 {
-    if (!dixRegisterPrivateKey(&present_screen_private_key, PRIVATE_SCREEN, 0))
-        return FALSE;
-
-    if (!dixRegisterPrivateKey(&present_window_private_key, PRIVATE_WINDOW, 0))
-        return FALSE;
-
     if (!present_screen_priv(screen)) {
         present_screen_priv_ptr screen_priv = present_screen_priv_init(screen);
         if (!screen_priv)
