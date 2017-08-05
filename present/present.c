@@ -201,7 +201,7 @@ present_set_tree_pixmap(WindowPtr window,
  * request again if it's still not actually ready
  */
 static void
-present_wait_fence_triggered(void *param)   // TODOX: mode different? <- when execute_wait different
+present_wait_fence_triggered(void *param)
 {
     present_vblank_ptr      vblank = param;
     ScreenPtr               screen = vblank->screen;
@@ -221,6 +221,7 @@ present_execute_wait(present_vblank_ptr vblank, uint64_t crtc_msc)
         vblank->requeue = FALSE;
         if (msc_is_after(vblank->target_msc, crtc_msc) &&
             Success == screen_priv->queue_vblank(screen,
+                                                 vblank->window,
                                                  vblank->crtc,
                                                  vblank->event_id,
                                                  vblank->target_msc))
@@ -246,6 +247,7 @@ present_execute_flip_recover(present_vblank_ptr vblank, uint64_t crtc_msc)
     /* If present_flip failed, we may have to requeue for the target MSC */
     if (vblank->target_msc == crtc_msc + 1 &&
         Success == screen_priv->queue_vblank(screen,
+                                             vblank->window,
                                              vblank->crtc,
                                              vblank->event_id,
                                              vblank->target_msc)) {

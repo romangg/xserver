@@ -133,18 +133,18 @@ present_rootless_free_idle_vblanks(WindowPtr window)
 
 static int
 present_rootless_queue_vblank(ScreenPtr screen,
-                     void* target,
-                     uint64_t event_id,
-                     uint64_t msc)
+                              WindowPtr window,
+                              RRCrtcPtr crtc,
+                              uint64_t event_id,
+                              uint64_t msc)
 {
-    WindowPtr window = target;
     Bool ret;
 //    if (crtc == NULL)
 //        ret = present_fake_queue_vblank(screen, event_id, msc);
 //    else
 //    {
         present_screen_priv_ptr     screen_priv = present_screen_priv(screen);
-        ret = (*screen_priv->rootless_info->queue_vblank) (window, event_id, msc);
+        ret = (*screen_priv->rootless_info->queue_vblank) (window, event_id, msc);  // TODOX: also submit crtc?
 //    }
     return ret;
 }
@@ -269,7 +269,7 @@ present_rootless_event_notify(WindowPtr window, uint64_t event_id, uint64_t ust,
 
     xorg_list_for_each_entry(vblank, &window_priv->idle_queue, event_queue) {
         if (vblank->event_id == event_id) {
-            present_rootless_flip_idle_vblank(vblank); //TODOX: fctptr
+            present_rootless_flip_idle_vblank(vblank);
             return;
         }
     }
@@ -603,7 +603,7 @@ present_rootless_pixmap(present_window_priv_ptr window_priv,
     xorg_list_append(&vblank->event_queue, &window_priv->exec_queue);
     vblank->queued = TRUE;
     if (crtc_msc < target_msc) {
-        if (present_rootless_queue_vblank(screen, window, vblank->event_id, target_msc) == Success) {
+        if (present_rootless_queue_vblank(screen, window, target_crtc, vblank->event_id, target_msc) == Success) {
             return Success;
         }
         DebugPresent(("present_queue_vblank failed\n"));

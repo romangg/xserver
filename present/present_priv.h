@@ -151,9 +151,10 @@ typedef void (*present_priv_flips_destroy_ptr)(ScreenPtr screen);
 typedef void (*present_priv_create_event_id_ptr)(present_window_priv_ptr window_priv, present_vblank_ptr vblank);
 typedef void (*present_priv_re_execute_ptr)(present_vblank_ptr vblank);
 typedef int (*present_priv_queue_vblank_ptr)(ScreenPtr screen,
-                                 void* target,
-                                 uint64_t event_id,
-                                 uint64_t msc);
+                                             WindowPtr window,
+                                             RRCrtcPtr crtc,
+                                             uint64_t event_id,
+                                             uint64_t msc);
 typedef RRCrtcPtr (*present_priv_get_crtc_ptr)(present_screen_priv_ptr screen_priv, WindowPtr window);
 typedef uint32_t (*present_priv_query_capabilities_ptr)(present_screen_priv_ptr screen_priv);
 typedef void (*present_priv_abort_vblank_ptr)(ScreenPtr screen, void *target, uint64_t event_id, uint64_t msc);

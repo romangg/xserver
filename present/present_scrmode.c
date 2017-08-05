@@ -155,11 +155,11 @@ present_scrmode_query_capabilities(present_screen_priv_ptr screen_priv)
 
 static int
 present_scrmode_queue_vblank(ScreenPtr screen,
-                     void* target,
-                     uint64_t event_id,
-                     uint64_t msc)
+                             WindowPtr window,
+                             RRCrtcPtr crtc,
+                             uint64_t event_id,
+                             uint64_t msc)
 {
-    RRCrtcPtr crtc = target;
     Bool                        ret;
 
     if (crtc == NULL)
@@ -671,7 +671,7 @@ present_scrmode_pixmap(present_window_priv_ptr window_priv,
     xorg_list_append(&vblank->event_queue, &present_exec_queue);
     vblank->queued = TRUE;
     if (crtc_msc < target_msc) {
-        if (present_scrmode_queue_vblank(screen, target_crtc, vblank->event_id, target_msc) == Success) {
+        if (present_scrmode_queue_vblank(screen, window, target_crtc, vblank->event_id, target_msc) == Success) {
             return Success;
         }
         DebugPresent(("present_queue_vblank failed\n"));
