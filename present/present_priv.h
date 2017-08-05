@@ -330,15 +330,11 @@ void
 present_scrap_obsolete_vblank(present_vblank_ptr vblank);
 
 void
-present_timings(present_window_priv_ptr window_priv,
-                RRCrtcPtr target_crtc,
-                uint32_t options,
-                uint64_t *ust,
-                uint64_t *crtc_msc,
-                uint64_t *target_msc,
-                uint64_t window_msc,
-                uint64_t divisor,
-                uint64_t remainder);
+present_adjust_timings(uint32_t options,
+                       uint64_t *crtc_msc,
+                       uint64_t *target_msc,
+                       uint64_t divisor,
+                       uint64_t remainder);
 
 void
 present_execute_complete(present_vblank_ptr vblank, uint64_t ust, uint64_t crtc_msc);

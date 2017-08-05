@@ -172,6 +172,17 @@ present_scrmode_queue_vblank(ScreenPtr screen,
     return ret;
 }
 
+static int
+present_scrmode_get_ust_msc(ScreenPtr screen, RRCrtcPtr crtc, uint64_t *ust, uint64_t *msc)
+{
+    present_screen_priv_ptr     screen_priv = present_screen_priv(screen);
+
+    if (crtc == NULL)
+        return present_fake_get_ust_msc(screen, ust, msc);
+    else
+        return (*screen_priv->info->get_ust_msc)(crtc, ust, msc);
+}
+
 /*
  * When the wait fence or previous flip is completed, it's time
  * to re-try the request
@@ -182,7 +193,7 @@ present_scrmode_re_execute(present_vblank_ptr vblank)
     uint64_t            ust = 0, crtc_msc = 0;
 
     if (vblank->crtc)
-        (void) present_get_ust_msc(vblank->screen, vblank->crtc, &ust, &crtc_msc);
+        (void) present_scrmode_get_ust_msc(vblank->screen, vblank->crtc, &ust, &crtc_msc);
 
     present_scrmode_execute(vblank, ust, crtc_msc);
 }
@@ -534,6 +545,32 @@ present_scrmode_create_event_id(present_window_priv_ptr window_priv, present_vbl
     vblank->event_id = ++present_event_id;
 }
 
+static uint64_t
+present_scrmode_window_to_crtc_msc(WindowPtr window, RRCrtcPtr crtc, uint64_t window_msc, uint64_t new_msc)
+{
+    present_window_priv_ptr     window_priv = present_get_window_priv(window, TRUE);
+
+    if (crtc != window_priv->crtc) {
+        uint64_t        old_ust, old_msc;
+
+        if (window_priv->crtc == PresentCrtcNeverSet) {
+            window_priv->msc_offset = 0;
+        } else {
+            /* The old CRTC may have been turned off, in which case
+             * we'll just use whatever previous MSC we'd seen from this CRTC
+             */
+
+            if (present_scrmode_get_ust_msc(window->drawable.pScreen, window_priv->crtc, &old_ust, &old_msc) != Success)   // TODOX: why here again?
+                old_msc = window_priv->msc;
+
+            window_priv->msc_offset += new_msc - old_msc;
+        }
+        window_priv->crtc = crtc;
+    }
+
+    return window_msc + window_priv->msc_offset;
+}
+
 int
 present_scrmode_pixmap(present_window_priv_ptr window_priv,
                PixmapPtr pixmap,
@@ -572,15 +609,19 @@ present_scrmode_pixmap(present_window_priv_ptr window_priv,
             target_crtc = present_scrmode_get_crtc(screen_priv, window);
     }
 
-    present_timings(window_priv,
-                    target_crtc,
-                    options,
-                    &ust,
-                    &crtc_msc,
-                    &target_msc,
-                    window_msc,
-                    divisor,
-                    remainder);
+    if (present_scrmode_get_ust_msc(screen, target_crtc, &ust, &crtc_msc) == Success) {
+        /* Stash the current MSC away in case we need it later
+         */
+        window_priv->msc = crtc_msc;
+    }
+
+    target_msc = present_scrmode_window_to_crtc_msc(window, target_crtc, window_msc, crtc_msc);
+
+    present_adjust_timings(options,
+                           &crtc_msc,
+                           &target_msc,
+                           divisor,
+                           remainder);
 
     /*
      * Look for a matching presentation already on the list and
@@ -654,7 +695,7 @@ present_scrmode_flip_destroy(ScreenPtr screen)
     present_scrmode_flip_idle(screen);
 }
 
-void
+static void
 present_scrmode_abort_vblank(ScreenPtr screen, void* target, uint64_t event_id, uint64_t msc)
 {
     RRCrtcPtr crtc = target;

@@ -145,17 +145,6 @@ present_query_capabilities(RRCrtcPtr crtc)
     return screen_priv->query_capabilities(screen_priv);
 }
 
-static int
-present_get_ust_msc(ScreenPtr screen, RRCrtcPtr crtc, uint64_t *ust, uint64_t *msc)
-{
-    present_screen_priv_ptr     screen_priv = present_screen_priv(screen);
-
-    if (crtc == NULL)
-        return present_fake_get_ust_msc(screen, ust, msc);
-    else
-        return (*screen_priv->info->get_ust_msc)(crtc, ust, msc);
-}
-
 static void
 present_flush(WindowPtr window)
 {
@@ -169,32 +158,6 @@ present_flush(WindowPtr window)
         return;
 
     (*screen_priv->info->flush) (window);
-}
-
-static uint64_t
-present_window_to_crtc_msc(WindowPtr window, RRCrtcPtr crtc, uint64_t window_msc, uint64_t new_msc)
-{
-    present_window_priv_ptr     window_priv = present_get_window_priv(window, TRUE);
-
-    if (crtc != window_priv->crtc) {
-        uint64_t        old_ust, old_msc;
-
-        if (window_priv->crtc == PresentCrtcNeverSet) {
-            window_priv->msc_offset = 0;
-        } else {
-            /* The old CRTC may have been turned off, in which case
-             * we'll just use whatever previous MSC we'd seen from this CRTC
-             */
-
-            if (present_get_ust_msc(window->drawable.pScreen, window_priv->crtc, &old_ust, &old_msc) != Success)
-                old_msc = window_priv->msc;
-
-            window_priv->msc_offset += new_msc - old_msc;
-        }
-        window_priv->crtc = crtc;
-    }
-
-    return window_msc + window_priv->msc_offset;
 }
 
 struct pixmap_visit {
@@ -323,30 +286,12 @@ present_execute_complete(present_vblank_ptr vblank, uint64_t ust, uint64_t crtc_
 }
 
 void
-present_timings(present_window_priv_ptr window_priv,    //TODOX: timings on only windows still work?
-                RRCrtcPtr target_crtc,
-                uint32_t options,
-                uint64_t *ust,
+present_adjust_timings(uint32_t options,
                 uint64_t *crtc_msc,
                 uint64_t *target_msc,
-                uint64_t window_msc,
                 uint64_t divisor,
                 uint64_t remainder)
 {
-    WindowPtr   window = window_priv->window;
-    ScreenPtr   screen = window->drawable.pScreen;
-    int         ret;
-
-    ret = present_get_ust_msc(screen, target_crtc, ust, crtc_msc);    //TODOX: in rootless call present_rootless_get_ust_msc
-
-    *target_msc = present_window_to_crtc_msc(window, target_crtc, window_msc, *crtc_msc);
-
-    if (ret == Success) {
-        /* Stash the current MSC away in case we need it later
-         */
-        window_priv->msc = *crtc_msc;
-    }
-
     /* Adjust target_msc to match modulus
      */
     if (msc_is_equal_or_after(*crtc_msc, *target_msc)) {

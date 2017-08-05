@@ -497,6 +497,32 @@ present_rootless_create_event_id(present_window_priv_ptr window_priv, present_vb
     vblank->event_id = ++window_priv->event_id;
 }
 
+static uint64_t
+present_rootless_window_to_crtc_msc(WindowPtr window, RRCrtcPtr crtc, uint64_t window_msc, uint64_t new_msc)
+{
+    present_window_priv_ptr     window_priv = present_get_window_priv(window, TRUE);
+
+    if (crtc != window_priv->crtc) {
+        uint64_t        old_ust, old_msc;
+
+        if (window_priv->crtc == PresentCrtcNeverSet) {
+            window_priv->msc_offset = 0;
+        } else {
+            /* The old CRTC may have been turned off, in which case
+             * we'll just use whatever previous MSC we'd seen from this CRTC
+             */
+
+            if (present_rootless_get_ust_msc(window->drawable.pScreen, window, &old_ust, &old_msc) != Success)   // TODOX: why here again?
+                old_msc = window_priv->msc;
+
+            window_priv->msc_offset += new_msc - old_msc;
+        }
+        window_priv->crtc = crtc;
+    }
+
+    return window_msc + window_priv->msc_offset;
+}
+
 int
 present_rootless_pixmap(present_window_priv_ptr window_priv,
                         PixmapPtr pixmap,
@@ -524,15 +550,16 @@ present_rootless_pixmap(present_window_priv_ptr window_priv,
 
     target_crtc = present_get_crtc(window);
 
-    present_timings(window_priv,
-                    target_crtc,
-                    options,
-                    &ust,
-                    &crtc_msc,
-                    &target_msc,
-                    window_msc,
-                    divisor,
-                    remainder);
+    if (present_rootless_get_ust_msc(screen, window, &ust, &crtc_msc) == Success)
+        window_priv->msc = crtc_msc;
+
+    target_msc = present_rootless_window_to_crtc_msc(window, target_crtc, window_msc, crtc_msc);
+
+    present_adjust_timings(options,
+                           &crtc_msc,
+                           &target_msc,
+                           divisor,
+                           remainder);
 
     if (!update && pixmap) {
         xorg_list_for_each_entry_safe(vblank, tmp, &window_priv->vblank, window_list) {
