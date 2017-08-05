@@ -497,10 +497,10 @@ xwl_realize_window(WindowPtr window)
         wl_region_destroy(region);
     }
 
-//    if (xwl_screen->present) {
-//        xwl_window->present_crtc_fake = RRCrtcCreate(xwl_screen->screen, xwl_window);
-//        xwl_window->present_msc = 1;
-//    }
+    if (xwl_screen->present) {
+        xwl_window->present_crtc_fake = RRCrtcCreate(xwl_screen->screen, xwl_window);
+        xwl_window->present_msc = 1;
+    }
 
     wl_display_flush(xwl_screen->display);
 
@@ -591,8 +591,8 @@ xwl_unrealize_window(WindowPtr window)
         free(event);
     }
 
-//    if (xwl_window->present_crtc_fake)
-//        RRCrtcDestroy(xwl_window->present_crtc_fake);
+    if (xwl_window->present_crtc_fake)
+        RRCrtcDestroy(xwl_window->present_crtc_fake);
 
     free(xwl_window);
     dixSetPrivate(&window->devPrivates, &xwl_window_private_key, NULL);

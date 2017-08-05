@@ -48,9 +48,7 @@ void
 xwl_present_unrealize(WindowPtr window)
 {
     struct xwl_window           *xwl_window = xwl_window_from_window(window);
-    struct xwl_output           *xwl_output;
     struct xwl_present_event    *event, *tmp;
-    uint64_t                    msc;
 
     if (xwl_window == NULL)
         return;
@@ -59,14 +57,10 @@ xwl_present_unrealize(WindowPtr window)
     if (xwl_window->present_window != window)
         return;
 
-    xwl_output = xwl_window->present_xwl_output;
-    msc = xwl_output ? xwl_output->msc : present_last_msc;
-
-
     /* Clear remaining buffer releases */
     xorg_list_for_each_entry_safe(event, tmp, &xwl_present_release, list) {
         if (event->xwl_window == xwl_window) {
-            present_event_notify(event->event_id, 0, msc);
+            present_event_notify(event->event_id, 0, xwl_window->present_msc);
             xorg_list_del(&event->list);
             free(event);
         }
@@ -114,130 +108,24 @@ static const struct wl_callback_listener present_frame_listener = {
     present_frame_callback
 };
 
-static int
-xwl_present_box_coverage(BoxPtr boxA, BoxPtr boxB)
-{
-    BoxRec boxC;
-
-    boxC->x1 = boxA->x1 > boxB->x1 ? boxA->x1 : boxB->x1;
-    boxC->x2 = boxA->x2 < boxB->x2 ? boxA->x2 : boxB->x2;
-
-    if (boxC->x1 >= boxC->x2) {
-        boxC->x1 = boxC->x2 = boxC->y1 = boxC->y2 = 0;
-    } else {
-        boxC->y1 = boxA->y1 > boxB->y1 ? boxA->y1 : boxB->y1;
-        boxC->y2 = boxA->y2 < boxB->y2 ? boxA->y2 : boxB->y2;
-        if (boxC->y1 >= boxC->y2)
-            boxC->x1 = boxC->x2 = boxC->y1 = boxC->y2 = 0;
-    }
-    return (int)(boxC->x2 - boxC->x1) * (int)(boxC->y2 - boxC->y1);
-}
-
-static int
-xwl_present_output_coverage(struct xwl_output *xwl_output, WindowPtr window)
-{
-    BoxRec output_box, win_box, inters_box;
-
-    output_box.x1 = xwl_output->x;
-    output_box.y1 = xwl_output->y;
-    output_box.x2 = output_box.x1 + xwl_output->width;
-    output_box.y2 = output_box.y1 + xwl_output->height;
-
-    win_box.x1 = window->drawable.x;
-    win_box.y1 = window->drawable.y;
-    win_box.x2 = win_box.x1 + window->drawable.width;
-    win_box.y2 = win_box.y1 + window->drawable.height;
-
-    inters_box.x1 = output_box->x1 > win_box->x1 ? output_box->x1 : win_box->x1;
-    inters_box.x2 = output_box->x2 < win_box->x2 ? output_box->x2 : win_box->x2;
-
-    if (inters_box.x1 >= inters_box.x2) {
-        inters_box.x1 = inters_box.x2 = inters_box.y1 = inters_box.y2 = 0;
-    } else {
-        inters_box.y1 = output_box->y1 > win_box->y1 ? output_box->y1 : win_box->y1;
-        inters_box.y2 = output_box->y2 < win_box->y2 ? output_box->y2 : win_box->y2;
-        if (inters_box.y1 >= inters_box.y2)
-            inters_box.x1 = inters_box.x2 = inters_box.y1 = inters_box.y2 = 0;
-    }
-    return (int)(inters_box.x2 - inters_box.x1) * (int)(inters_box.y2 - inters_box.y1);
-}
-
 static RRCrtcPtr
 xwl_present_get_crtc(WindowPtr window)
 {
-    struct xwl_screen   *xwl_screen;
-    struct xwl_window   *xwl_window = xwl_window_from_window(window);
-    struct xwl_output   *xwl_output;
-    RRCrtcPtr           crtc;
-    int                 best_coverage, coverage;
-
-    if (!xwl_window)
+    struct xwl_window *xwl_window = xwl_window_from_window(window);
+    if (xwl_window == NULL)
         return NULL;
 
-    crtc = NULL;
-    best_coverage = 0;
-    xwl_screen = xwl_window->xwl_screen;
-
-    /*
-     * On a single head system, just take the one output
-     */
-    if (xwl_screen->output_count == 1) {
-        xwl_output = xorg_list_first_entry(&xwl_screen->output_list, struct *xwl_output, link);
-        return xwl_output->randr_crtc;
-    }
-
-    /*
-     * Test if the window is completely on the
-     * old output, optimizing the selection process
-     *
-     */
-    xorg_list_for_each_entry(xwl_output, &xwl_screen->output_list, link) {
-        if (xwl_window->present_xwl_output == xwl_output) {
-            if (window->drawable.x <= xwl_output->x &&
-                    window->drawable.y <= xwl_output->y &&
-                    window->drawable.width <= xwl_output->width
-                    window->drawable.height <= xwl_output->height)
-                return xwl_output->randr_crtc;
-        }
-    }
-
-    xwl_window->present_xwl_output = NULL;
-
-    /*
-     * At this point we'll update the crtc in any case,
-     * but NULL is still possible, if the window is not covered
-     * on any crtc at the moment
-     *
-     */
-    xorg_list_for_each_entry(xwl_output, &xwl_screen->output_list, link) {
-        coverage = xwl_present_crtc_coverage(xwl_output, window);
-        if (best_coverage < coverage) {
-            xwl_window->present_xwl_output = xwl_output;
-            crtc = xwl_output->randr_crtc;
-        }
-    }
-
-    return crtc;
+    return xwl_window->present_crtc_fake;
 }
 
 static int
 xwl_present_get_ust_msc(RRCrtcPtr crtc, CARD64 *ust, CARD64 *msc)
 {
-    struct xwl_output   *xwl_output;
-    Bool                output_found = FALSE;
-
-    xorg_list_for_each_entry(xwl_output, &xwl_screen->output_list, link) {
-        if (crtc == xwl_output->randr_crtc) {
-            output_found = TRUE;
-            break;
-        }
-    }
-
-    if (!output_found)
-        return BadMatch;
-
+    struct xwl_window *xwl_window = crtc->devPrivate;
+    if (!xwl_window)
+        return BadAlloc;
     *ust = 0;
-    *msc = xwl_output->msc;
+    *msc = xwl_window->present_msc;
 
     return Success;
 }
@@ -308,32 +196,27 @@ xwl_present_check_flip(RRCrtcPtr crtc,
                       PixmapPtr pixmap,
                       Bool sync_flip)
 {
-    struct xwl_window   *xwl_window = xwl_window_from_window(window);
-    RRCrtcPtr           crtc_internal;
-    struct xwl_output   *xwl_output;
+    /* We make sure compositing is active. TODOX: Is this always the case in Xwayland anyway? */
+#ifndef COMPOSITE
+    return FALSE;
+#endif
+    /* we can't take crtc->devPrivate because window might have been reparented and
+     * the former parent xwl_window destroyed */
+    struct xwl_window *xwl_window = xwl_window_from_window(window);
 
     if (!xwl_window)
         return FALSE;
-
-    crtc_internal = xwl_present_get_crtc(window);
-    if (!crtc_internal)
+    if (!xwl_window->present_crtc_fake)
+        return FALSE;
+    /* Make sure the client doesn't try to flip to another crtc
+     * than the one created for 'xwl_window'
+     */
+    if (xwl_window->present_crtc_fake != crtc)
         return FALSE;
 
-    if (crtc && crtc_internal != crtc)
+    /* In order to reduce complexity, we currently allow only one subsurface, i.e. one completely visible region */
+    if (RegionNumRects(&window->clipList) > 1)
         return FALSE;
-
-    xwl_output = crtc_internal->devPrivate;
-    xwl_window->present_last_msc = xwl_output->msc;
-
-//    /* Make sure the client doesn't try to flip to another crtc
-//     * than the one created for 'xwl_window'
-//     */
-//    if (xwl_window->present_crtc_fake != crtc)
-//        return FALSE;
-
-//    /* In order to reduce complexity, we currently allow only one subsurface, i.e. one completely visible region */
-//    if (RegionNumRects(&window->clipList) > 1)  //TODOX: we need to test if xwl_window has already another flipping window instead and unflip the old one in this case - is done below already
-//        return FALSE;
 
     if (xwl_window->present_window != window) {
         xwl_window->present_window = window;
@@ -354,14 +237,13 @@ xwl_present_cleanup_surfaces(struct xwl_window *xwl_window)
 }
 
 static Bool
-xwl_present_flip(WindowPtr window,
-                 RRCrtcPtr crtc,
-                 uint64_t event_id,
-                 uint64_t target_msc,
-                 PixmapPtr pixmap,
-                 Bool sync_flip)
+xwl_present_flip(RRCrtcPtr crtc,
+                uint64_t event_id,
+                uint64_t target_msc,
+                PixmapPtr pixmap,
+                Bool sync_flip)
 {
-    struct xwl_window           *xwl_window = xwl_window_from_window(window);
+    struct xwl_window           *xwl_window = crtc->devPrivate;
     struct xwl_screen           *xwl_screen = xwl_window->xwl_screen;
     WindowPtr                   window = xwl_window->window;
     WindowPtr                   present_window = xwl_window->present_window;
@@ -435,11 +317,10 @@ xwl_present_flip(WindowPtr window,
 }
 
 static void
-xwl_present_flip_executed(WindowPtr window, RRCrtcPtr crtc, uint64_t event_id, RegionPtr damage)
+xwl_present_flip_executed(RRCrtcPtr crtc, uint64_t event_id, RegionPtr damage)
 {
-    struct xwl_window   *xwl_window = xwl_window_from_window(window);
-    struct xwl_output   *xwl_output = crtc->devPrivate;
-    BoxPtr              box = RegionExtents(damage);    // TODOX: this needs to be converted to surface local coordinates!
+    struct xwl_window *xwl_window = crtc->devPrivate;
+    BoxPtr box = RegionExtents(damage);
 
     wl_surface_damage(xwl_window->present_surface, box->x1, box->y1,
                       box->x2 - box->x1, box->y2 - box->y1);
@@ -447,7 +328,7 @@ xwl_present_flip_executed(WindowPtr window, RRCrtcPtr crtc, uint64_t event_id, R
     wl_surface_commit(xwl_window->present_surface);
     wl_display_flush(xwl_window->xwl_screen->display);
 
-    present_event_notify(event_id, 0, xwl_output->msc);
+    present_event_notify(event_id, 0, xwl_window->present_msc);
 }
 
 static void
@@ -472,7 +353,7 @@ static present_screen_info_rec xwl_present_screen_info = {
     .rootless = TRUE,
     .capabilities = PresentCapabilityAsync,
     .check_flip = xwl_present_check_flip,
-    .flip_rootless = xwl_present_flip,
+    .flip = xwl_present_flip,
     .unflip_rootless = xwl_present_unflip,
     .flip_executed = xwl_present_flip_executed,
 };

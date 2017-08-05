@@ -71,8 +71,6 @@ struct xwl_screen {
     struct xorg_list seat_list;
     struct xorg_list damage_window_list;
 
-    int output_count;
-
     int wayland_fd;
     struct wl_display *display;
     struct wl_registry *registry;
@@ -118,13 +116,12 @@ struct xwl_window {
     Bool allow_commits;
 
     /* Present */
-//    RRCrtcPtr present_crtc_fake;
-    struct xwl_output *present_xwl_output;
+    RRCrtcPtr present_crtc_fake;
     WindowPtr present_window;
     Bool present_need_configure;
     struct wl_surface *present_surface;
     struct wl_subsurface *present_subsurface;
-    uint64_t present_last_msc;
+    uint64_t present_msc;
     struct wl_callback *present_frame_callback;
     struct xorg_list present_event_list;
 };
@@ -288,8 +285,6 @@ struct xwl_output {
     RRCrtcPtr randr_crtc;
     int32_t x, y, width, height, refresh;
     Rotation rotation;
-
-    uint64_t msc;
 };
 
 struct xwl_pixmap;

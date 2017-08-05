@@ -227,7 +227,6 @@ output_handle_done(void *data, struct wl_output *wl_output)
 
     if (!has_this_output) {
         xorg_list_append(&xwl_output->link, &xwl_screen->output_list);
-        xwl_screen->output_count++;
 
         /* we did not check this output for new screen size, do it now */
         output_get_new_size(xwl_output, &height, &width);
@@ -294,8 +293,6 @@ xwl_output_create(struct xwl_screen *xwl_screen, uint32_t id)
     RROutputSetCrtcs(xwl_output->randr_output, &xwl_output->randr_crtc, 1);
     RROutputSetConnection(xwl_output->randr_output, RR_Connected);
 
-    xwl_output->msc = 1;
-
     return xwl_output;
 
 err:
@@ -324,7 +321,6 @@ xwl_output_remove(struct xwl_output *xwl_output)
     RRCrtcDestroy(xwl_output->randr_crtc);
     RROutputDestroy(xwl_output->randr_output);
     xorg_list_del(&xwl_output->link);
-    xwl_screen->output_count--;
 
     xorg_list_for_each_entry(it, &xwl_screen->output_list, link)
         output_get_new_size(it, &height, &width);
