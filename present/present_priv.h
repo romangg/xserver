@@ -158,7 +158,7 @@ typedef int (*present_priv_queue_vblank_ptr)(ScreenPtr screen,
 typedef RRCrtcPtr (*present_priv_get_crtc_ptr)(present_screen_priv_ptr screen_priv, WindowPtr window);
 typedef uint32_t (*present_priv_query_capabilities_ptr)(present_screen_priv_ptr screen_priv);
 typedef void (*present_priv_abort_vblank_ptr)(ScreenPtr screen, void *target, uint64_t event_id, uint64_t msc);
-typedef uint32_t (*present_priv_flush_ptr)(WindowPtr window);
+typedef void (*present_priv_flush_ptr)(WindowPtr window);
 
 struct present_screen_priv {
     CloseScreenProcPtr          CloseScreen;
@@ -250,24 +250,6 @@ present_pixmap(WindowPtr window,
                    int num_notifies);
 
 int
-present_scrmode_pixmap(present_window_priv_ptr window_priv,
-                   PixmapPtr pixmap,
-                   CARD32 serial,
-                   RegionPtr valid,
-                   RegionPtr update,
-                   int16_t x_off,
-                   int16_t y_off,
-                   RRCrtcPtr target_crtc,
-                   SyncFence *wait_fence,
-                   SyncFence *idle_fence,
-                   uint32_t options,
-                   uint64_t target_msc,
-                   uint64_t divisor,
-                   uint64_t remainder,
-                   present_notify_ptr notifies,
-                   int num_notifies);
-
-int
 present_notify_msc(WindowPtr window,
                    CARD32 serial,
                    uint64_t target_msc,
@@ -295,9 +277,6 @@ present_rootless_set_abort_flip(WindowPtr window);
 void
 present_check_flip_window(WindowPtr window);
 
-void
-present_free_window_vblank_idle(WindowPtr window);
-
 RRCrtcPtr
 present_get_crtc(WindowPtr window);
 
@@ -305,7 +284,10 @@ uint32_t
 present_query_capabilities(RRCrtcPtr crtc);
 
 Bool
-present_scrmode_init(void);
+present_init(void);
+
+void
+present_scrmode_init_scrmode(present_screen_priv_ptr screen_priv);
 
 present_vblank_ptr
 present_create_vblank(present_window_priv_ptr window_priv,
@@ -364,30 +346,14 @@ present_copy_region(DrawablePtr drawable,
 /*
  * present_rootless.c
  */
-
-int
-present_rootless_pixmap(present_window_priv_ptr window_priv,
-                        PixmapPtr pixmap,
-                        CARD32 serial,
-                        RegionPtr valid,
-                        RegionPtr update,
-                        int16_t x_off,
-                        int16_t y_off,
-                        RRCrtcPtr target_crtc,
-                        SyncFence *wait_fence,
-                        SyncFence *idle_fence,
-                        uint32_t options,
-                        uint64_t window_msc,
-                        uint64_t divisor,
-                        uint64_t remainder,
-                        present_notify_ptr notifies,
-                        int num_notifies);
-
 void
 present_rootless_check_flip_window (WindowPtr window);
 
 void
 present_rootless_free_idle_vblanks(WindowPtr window);
+
+void
+present_rootless_init_rootless(present_screen_priv_ptr screen_priv);
 
 /*
  * present_event.c

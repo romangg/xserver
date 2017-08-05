@@ -245,6 +245,7 @@ present_screen_init(ScreenPtr screen, present_screen_info_ptr info)
             return FALSE;
 
         screen_priv->info = info;
+        present_scrmode_init_scrmode(screen_priv);
 
         present_fake_screen_init(screen);
     }
@@ -270,7 +271,7 @@ present_rootless_screen_init(ScreenPtr screen, present_rootless_screen_info_ptr 
             return FALSE;
 
         screen_priv->rootless_info = info;
-        screen_priv->present_pixmap = &present_rootless_pixmap;
+        present_rootless_init_rootless(screen_priv);
 
         present_fake_screen_init(screen);   //TODOX: not needed in rootless?
     }
@@ -300,7 +301,7 @@ present_extension_init(void)
 
     present_request = extension->base;
 
-    if (!present_scrmode_init())
+    if (!present_init())
         goto bail;
 
     if (!present_event_init())

@@ -532,8 +532,8 @@ present_rootless_window_to_crtc_msc(WindowPtr window, RRCrtcPtr crtc, uint64_t w
     return window_msc + window_priv->msc_offset;
 }
 
-int
-present_rootless_pixmap(present_window_priv_ptr window_priv,
+static int
+present_rootless_present_pixmap(present_window_priv_ptr window_priv,
                         PixmapPtr pixmap,
                         CARD32 serial,
                         RegionPtr valid,
@@ -671,4 +671,20 @@ present_rootless_abort_vblank(ScreenPtr screen, void* target, uint64_t event_id,
             return;
         }
     }
+}
+
+void
+present_rootless_init_rootless(present_screen_priv_ptr screen_priv)
+{
+    screen_priv->check_flip_window = &present_rootless_check_flip_window;
+    screen_priv->create_event_id = &present_rootless_create_event_id;
+    screen_priv->present_pixmap = &present_rootless_present_pixmap;
+    screen_priv->flips_destroy = &present_rootless_flips_destroy;
+    screen_priv->re_execute = &present_rootless_re_execute;
+    screen_priv->queue_vblank = &present_rootless_queue_vblank;
+    screen_priv->get_crtc = &present_rootless_get_crtc;
+    screen_priv->query_capabilities = &present_rootless_query_capabilities;
+    screen_priv->check_flip = &present_rootless_check_flip;
+    screen_priv->abort_vblank = &present_rootless_abort_vblank;
+    screen_priv->flush = &present_rootless_flush;
 }
