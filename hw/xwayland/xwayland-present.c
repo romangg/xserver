@@ -343,18 +343,20 @@ xwl_present_unflip(WindowPtr window, uint64_t event_id)
     present_event_notify(event_id, 0, 0);
 }
 
-static present_screen_info_rec xwl_present_screen_info = {
+static present_rootless_screen_info_rec xwl_present_info = {
     .version = PRESENT_SCREEN_INFO_VERSION,
-    .get_crtc = xwl_present_get_crtc,
+//    .get_crtc = xwl_present_get_crtc,
+
     .get_ust_msc = xwl_present_get_ust_msc,
     .queue_vblank = xwl_present_queue_vblank,
     .abort_vblank = xwl_present_abort_vblank,
+
     .flush = xwl_present_flush,
-    .rootless = TRUE,
+
     .capabilities = PresentCapabilityAsync,
     .check_flip = xwl_present_check_flip,
     .flip = xwl_present_flip,
-    .unflip_rootless = xwl_present_unflip,
+    .unflip = xwl_present_unflip,
     .flip_executed = xwl_present_flip_executed,
 };
 
@@ -362,5 +364,5 @@ Bool
 xwl_present_init(ScreenPtr screen)
 {
     xorg_list_init(&xwl_present_release);
-    return present_screen_init(screen, &xwl_present_screen_info);
+    return present_rootless_screen_init(screen, &xwl_present_info);
 }
