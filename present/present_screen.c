@@ -47,7 +47,6 @@ present_get_window_priv(WindowPtr window, Bool create)
         return NULL;
     xorg_list_append(&window_priv->screen_list, &screen_priv->windows);
     xorg_list_init(&window_priv->vblank);
-    xorg_list_init(&window_priv->idle_vblank);
     xorg_list_init(&window_priv->notifies);
 
     xorg_list_init(&window_priv->exec_queue);
@@ -79,34 +78,21 @@ present_close_screen(ScreenPtr screen)
 }
 
 /*
- * Free any queued presentations for this window
- */
-static void
-present_free_window_vblank(WindowPtr window)
-{
-    ScreenPtr                   screen = window->drawable.pScreen;
-    present_screen_priv_ptr     screen_priv = present_screen_priv(screen);
-    present_window_priv_ptr     window_priv = present_window_priv(window);
-    present_vblank_ptr          vblank, tmp;
-
-    /* Clear up any fake vblanks */
-    present_fake_abort_vblank(screen, window, 0, 0);
-
-    xorg_list_for_each_entry_safe(vblank, tmp, &window_priv->vblank, window_list) {
-        screen_priv->abort_vblank(screen, window, vblank->crtc, vblank->event_id, vblank->target_msc);
-        present_vblank_destroy(vblank);
-    }
-}
-
-/*
- * Clean up any pending or current flips for this window
+ * Clean up any queued presentations, pending and current flips for this window
  */
 static void
 present_clear_window_flip_scrmode(WindowPtr window)
 {
     ScreenPtr                   screen = window->drawable.pScreen;
+    present_window_priv_ptr     window_priv = present_window_priv(window);
     present_screen_priv_ptr     screen_priv = present_screen_priv(screen);
     present_vblank_ptr          flip_pending;
+    present_vblank_ptr          vblank, tmp;
+
+    xorg_list_for_each_entry_safe(vblank, tmp, &window_priv->vblank, window_list) {
+        screen_priv->abort_vblank(screen, window, vblank->crtc, vblank->event_id, vblank->target_msc);
+        present_vblank_destroy(vblank);
+    }
 
     flip_pending = screen_priv->flip_pending;
 
@@ -123,8 +109,20 @@ present_clear_window_flip_scrmode(WindowPtr window)
 static void
 present_clear_window_flip_winmode(WindowPtr window)
 {
+    ScreenPtr                   screen = window->drawable.pScreen;
+    present_screen_priv_ptr     screen_priv = present_screen_priv(screen);
     present_vblank_ptr          flip_pending;
     present_window_priv_ptr     window_priv = present_window_priv(window);
+    present_vblank_ptr          vblank, tmp;
+
+    /* Clear up any fake vblanks */
+    present_fake_abort_vblank(screen, window, 0, 0);
+
+    /* we don't use the window_priv->vblank list, so clean up here */
+    xorg_list_for_each_entry_safe(vblank, tmp, &window_priv->exec_queue, event_queue) {
+        screen_priv->abort_vblank(screen, window, vblank->crtc, vblank->event_id, vblank->target_msc);
+        present_vblank_destroy(vblank);
+    }
 
     flip_pending = window_priv->flip_pending;
 
@@ -132,7 +130,7 @@ present_clear_window_flip_winmode(WindowPtr window)
         present_winmode_set_abort_flip(window);
         flip_pending->window = NULL;
     }
-    /* we clear the active flip in free_window_vblank_idle */
+    /* we clear the active flip in free_idle_vblanks */
     if (window_priv->restore_pixmap)
         present_winmode_restore_window_pixmap(window);
     present_winmode_free_idle_vblanks(window);
@@ -152,9 +150,6 @@ present_destroy_window(WindowPtr window)
     if (window_priv) {
         present_clear_window_notifies(window);
         present_free_events(window);
-        present_free_window_vblank(window);
-
-        ErrorF("PP present_destroy_window: %i, %i\n", window_priv, window_priv->msc);
 
         if (screen_priv->winmode_info)
             present_clear_window_flip_winmode(window); //TODOX: fct ptr?

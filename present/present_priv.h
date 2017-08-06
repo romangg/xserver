@@ -107,7 +107,6 @@ typedef struct present_window_priv {
     uint64_t               msc_offset;
     uint64_t               msc;         /* Last reported MSC from the current crtc */
     struct xorg_list       vblank;
-    struct xorg_list       idle_vblank;
     struct xorg_list       notifies;
 
     /* Below for winmode mode */

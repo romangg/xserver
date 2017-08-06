@@ -40,7 +40,6 @@ present_winmode_get_ust_msc(ScreenPtr screen, WindowPtr window, uint64_t *ust, u
 
     ret = (*screen_priv->winmode_info->get_ust_msc)(window, ust, msc);
 
-    ErrorF("PPPP present_winmode_get_ust_msc: %i, %i\n", window, *msc);
     if (ret == Success)
         return ret;
     else
@@ -133,7 +132,7 @@ present_winmode_free_idle_vblanks(WindowPtr window)
     present_window_priv_ptr         window_priv = present_window_priv(window);
     present_vblank_ptr              vblank, tmp;
 
-    xorg_list_for_each_entry_safe(vblank, tmp, &window_priv->idle_vblank, window_list) {
+    xorg_list_for_each_entry_safe(vblank, tmp, &window_priv->idle_queue, event_queue) {
         /* Deletes it from this list as well. */
         present_winmode_flip_idle_vblank(vblank);
     }
@@ -231,7 +230,6 @@ present_winmode_flip_notify(present_vblank_ptr vblank, uint64_t ust, uint64_t cr
     if (window_priv->flip_active) {
         /* Put the flip back in the window_list and wait for further notice from DDX */
         prev_vblank = window_priv->flip_active;
-        xorg_list_append(&prev_vblank->window_list, &window_priv->idle_vblank);
         xorg_list_append(&prev_vblank->event_queue, &window_priv->idle_queue);
     }
     window_priv->flip_active = vblank;
@@ -368,7 +366,7 @@ present_winmode_check_flip_window (WindowPtr window)
     }
 
     /* Now check any queued vblanks */
-    xorg_list_for_each_entry(vblank, &window_priv->vblank, window_list) {
+    xorg_list_for_each_entry(vblank, &window_priv->flip_queue, event_queue) {
         if (vblank->queued && vblank->flip && !present_winmode_check_flip(vblank->crtc, window, vblank->pixmap, vblank->sync_flip, NULL, 0, 0)) {
             vblank->flip = FALSE;
             if (vblank->sync_flip)
@@ -425,10 +423,7 @@ present_winmode_execute(present_vblank_ptr vblank, uint64_t ust, uint64_t crtc_m
         }
     }
 
-    ErrorF("PP present_winmode_execute: %i, %i\n", window_priv, vblank->flip);
-
     xorg_list_del(&vblank->event_queue);
-    xorg_list_del(&vblank->window_list);
     vblank->queued = FALSE;
 
     if (vblank->pixmap && vblank->window) {
@@ -478,7 +473,6 @@ present_winmode_execute(present_vblank_ptr vblank, uint64_t ust, uint64_t crtc_m
             /* Oops, flip failed. Clear the flip_pending field
               */
             window_priv->flip_pending = NULL;
-
             vblank->flip = FALSE;
         }
         DebugPresent(("\tc %p %8lld: %08lx -> %08lx\n", vblank, crtc_msc, vblank->pixmap->drawable.id, vblank->window->drawable.id));
@@ -491,7 +485,6 @@ present_winmode_execute(present_vblank_ptr vblank, uint64_t ust, uint64_t crtc_m
         present_execute_flip_recover(vblank, crtc_msc);
         if (vblank->queued) {
             xorg_list_add(&vblank->event_queue, &window_priv->exec_queue);
-            xorg_list_append(&vblank->window_list, &window_priv->vblank);
 
             return;
         }
@@ -558,14 +551,10 @@ present_winmode_present_pixmap(present_window_priv_ptr window_priv,
     uint64_t                    crtc_msc = 0;
     present_vblank_ptr          vblank, tmp;
 
-    ErrorF("PP present_winmode_present_pixmap: %i, %i\n", window_priv, pixmap);
-
     target_crtc = present_winmode_get_crtc(screen_priv, window);
 
     if (present_winmode_get_ust_msc(screen, window, &ust, &crtc_msc) == Success)
         window_priv->msc = crtc_msc;
-
-    ErrorF("PP present_winmode_get_ust_msc: %i, %i\n", window_priv, crtc_msc);
 
     target_msc = present_winmode_window_to_crtc_msc(window, target_crtc, window_msc, crtc_msc);
 
@@ -624,7 +613,6 @@ present_winmode_present_pixmap(present_window_priv_ptr window_priv,
         DebugPresent(("present_queue_vblank failed\n"));
     }
 
-    ErrorF("PP present_winmode_present_pixmap: EXECUTE\n");
     present_winmode_execute(vblank, ust, crtc_msc);
     return Success;
 }
