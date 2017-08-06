@@ -102,7 +102,7 @@ present_free_window_vblank(WindowPtr window)
  * Clean up any pending or current flips for this window
  */
 static void
-present_clear_window_flip(WindowPtr window)
+present_clear_window_flip_scrmode(WindowPtr window)
 {
     ScreenPtr                   screen = window->drawable.pScreen;
     present_screen_priv_ptr     screen_priv = present_screen_priv(screen);
@@ -154,11 +154,12 @@ present_destroy_window(WindowPtr window)
         present_free_events(window);
         present_free_window_vblank(window);
 
+        ErrorF("PP present_destroy_window: %i, %i\n", window_priv, window_priv->msc);
 
         if (screen_priv->winmode_info)
             present_clear_window_flip_winmode(window); //TODOX: fct ptr?
         else
-            present_clear_window_flip(window);
+            present_clear_window_flip_scrmode(window);
 
         xorg_list_del(&window_priv->screen_list);
         free(window_priv);

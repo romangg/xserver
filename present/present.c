@@ -328,6 +328,7 @@ present_create_vblank(present_window_priv_ptr window_priv,
                       SyncFence *wait_fence,
                       SyncFence *idle_fence,
                       uint32_t options,
+                      const uint32_t *capabilities,
                       present_notify_ptr notifies,
                       int num_notifies,
                       uint64_t *target_msc,
@@ -380,14 +381,14 @@ present_create_vblank(present_window_priv_ptr window_priv,
 
     if (pixmap != NULL &&
         !(options & PresentOptionCopy) &&
-        screen_priv->info) {
+        capabilities) {
         if (msc_is_after(*target_msc, crtc_msc) &&
             screen_priv->check_flip (target_crtc, window, pixmap, TRUE, valid, x_off, y_off))
         {
             vblank->flip = TRUE;
             vblank->sync_flip = TRUE;
             *target_msc = *target_msc - 1;
-        } else if ((screen_priv->info->capabilities & PresentCapabilityAsync) &&
+        } else if ((*capabilities & PresentCapabilityAsync) &&
             screen_priv->check_flip (target_crtc, window, pixmap, FALSE, valid, x_off, y_off))
         {
             vblank->flip = TRUE;

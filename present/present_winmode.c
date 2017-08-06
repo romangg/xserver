@@ -40,6 +40,7 @@ present_winmode_get_ust_msc(ScreenPtr screen, WindowPtr window, uint64_t *ust, u
 
     ret = (*screen_priv->winmode_info->get_ust_msc)(window, ust, msc);
 
+    ErrorF("PPPP present_winmode_get_ust_msc: %i, %i\n", window, *msc);
     if (ret == Success)
         return ret;
     else
@@ -424,6 +425,8 @@ present_winmode_execute(present_vblank_ptr vblank, uint64_t ust, uint64_t crtc_m
         }
     }
 
+    ErrorF("PP present_winmode_execute: %i, %i\n", window_priv, vblank->flip);
+
     xorg_list_del(&vblank->event_queue);
     xorg_list_del(&vblank->window_list);
     vblank->queued = FALSE;
@@ -555,10 +558,14 @@ present_winmode_present_pixmap(present_window_priv_ptr window_priv,
     uint64_t                    crtc_msc = 0;
     present_vblank_ptr          vblank, tmp;
 
+    ErrorF("PP present_winmode_present_pixmap: %i, %i\n", window_priv, pixmap);
+
     target_crtc = present_winmode_get_crtc(screen_priv, window);
 
     if (present_winmode_get_ust_msc(screen, window, &ust, &crtc_msc) == Success)
         window_priv->msc = crtc_msc;
+
+    ErrorF("PP present_winmode_get_ust_msc: %i, %i\n", window_priv, crtc_msc);
 
     target_msc = present_winmode_window_to_crtc_msc(window, target_crtc, window_msc, crtc_msc);
 
@@ -600,6 +607,7 @@ present_winmode_present_pixmap(present_window_priv_ptr window_priv,
                                    wait_fence,
                                    idle_fence,
                                    options,
+                                   &screen_priv->winmode_info->capabilities,
                                    notifies,
                                    num_notifies,
                                    &target_msc,
@@ -616,6 +624,7 @@ present_winmode_present_pixmap(present_window_priv_ptr window_priv,
         DebugPresent(("present_queue_vblank failed\n"));
     }
 
+    ErrorF("PP present_winmode_present_pixmap: EXECUTE\n");
     present_winmode_execute(vblank, ust, crtc_msc);
     return Success;
 }
