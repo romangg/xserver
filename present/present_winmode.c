@@ -44,7 +44,6 @@ present_winmode_get_ust_msc(ScreenPtr screen, WindowPtr window, uint64_t *ust, u
         return ret;
     else
         return present_fake_get_ust_msc(screen, ust, msc);
-
 }
 
 static RRCrtcPtr
@@ -142,10 +141,10 @@ present_winmode_free_idle_vblanks(WindowPtr window)
 
 static int
 present_winmode_queue_vblank(ScreenPtr screen,
-                              WindowPtr window,
-                              RRCrtcPtr crtc,
-                              uint64_t event_id,
-                              uint64_t msc)
+                             WindowPtr window,
+                             RRCrtcPtr crtc,
+                             uint64_t event_id,
+                             uint64_t msc)
 {
     Bool ret;
     if (crtc == NULL)
@@ -250,7 +249,6 @@ present_winmode_event_notify(WindowPtr window, uint64_t event_id, uint64_t ust, 
     present_window_priv_ptr     window_priv = present_window_priv(window);
     present_vblank_ptr          vblank;
 
-    // TODOX: go through a static window list to make sure window_priv is no dangling ptr?
     if (!window_priv)
         return;
     if (!event_id)
@@ -308,8 +306,8 @@ present_winmode_check_flip(RRCrtcPtr    crtc,
     if (!screen_priv->winmode_info)
         return FALSE;
 
-//    if (!crtc)
-//        return FALSE;
+    if (!crtc)
+        return FALSE;
 
     /* Check to see if the driver supports flips at all */
     if (!screen_priv->winmode_info->flip)
@@ -533,21 +531,21 @@ present_winmode_window_to_crtc_msc(WindowPtr window, RRCrtcPtr crtc, uint64_t wi
 
 static int
 present_winmode_present_pixmap(present_window_priv_ptr window_priv,
-                        PixmapPtr pixmap,
-                        CARD32 serial,
-                        RegionPtr valid,
-                        RegionPtr update,
-                        int16_t x_off,
-                        int16_t y_off,
-                        RRCrtcPtr target_crtc,
-                        SyncFence *wait_fence,
-                        SyncFence *idle_fence,
-                        uint32_t options,
-                        uint64_t window_msc,
-                        uint64_t divisor,
-                        uint64_t remainder,
-                        present_notify_ptr notifies,
-                        int num_notifies)
+                               PixmapPtr pixmap,
+                               CARD32 serial,
+                               RegionPtr valid,
+                               RegionPtr update,
+                               int16_t x_off,
+                               int16_t y_off,
+                               RRCrtcPtr target_crtc,
+                               SyncFence *wait_fence,
+                               SyncFence *idle_fence,
+                               uint32_t options,
+                               uint64_t window_msc,
+                               uint64_t divisor,
+                               uint64_t remainder,
+                               present_notify_ptr notifies,
+                               int num_notifies)
 {
     WindowPtr                   window = window_priv->window;
     ScreenPtr                   screen = window->drawable.pScreen;
@@ -592,20 +590,20 @@ present_winmode_present_pixmap(present_window_priv_ptr window_priv,
     }
 
     vblank = present_create_vblank(window_priv,
-                                pixmap,
-                                serial,
-                                valid,
-                                update,
-                                x_off,
-                                y_off,
-                                target_crtc,
-                                wait_fence,
-                                idle_fence,
-                                options,
-                                notifies,
-                                num_notifies,
-                                &target_msc,
-                                crtc_msc);
+                                   pixmap,
+                                   serial,
+                                   valid,
+                                   update,
+                                   x_off,
+                                   y_off,
+                                   target_crtc,
+                                   wait_fence,
+                                   idle_fence,
+                                   options,
+                                   notifies,
+                                   num_notifies,
+                                   &target_msc,
+                                   crtc_msc);
     if (!vblank)
         return BadAlloc;
 
@@ -674,15 +672,15 @@ present_winmode_abort_vblank(ScreenPtr screen, WindowPtr window, RRCrtcPtr crtc,
 void
 present_winmode_init_winmode(present_screen_priv_ptr screen_priv)
 {
-    screen_priv->check_flip_window = &present_winmode_check_flip_window;
-    screen_priv->create_event_id = &present_winmode_create_event_id;
-    screen_priv->present_pixmap = &present_winmode_present_pixmap;
-    screen_priv->flips_destroy = &present_winmode_flips_destroy;
-    screen_priv->re_execute = &present_winmode_re_execute;
-    screen_priv->queue_vblank = &present_winmode_queue_vblank;
-    screen_priv->get_crtc = &present_winmode_get_crtc;
-    screen_priv->query_capabilities = &present_winmode_query_capabilities;
-    screen_priv->check_flip = &present_winmode_check_flip;
-    screen_priv->abort_vblank = &present_winmode_abort_vblank;
-    screen_priv->flush = &present_winmode_flush;
+    screen_priv->check_flip_window  =   &present_winmode_check_flip_window;
+    screen_priv->create_event_id    =   &present_winmode_create_event_id;
+    screen_priv->present_pixmap     =   &present_winmode_present_pixmap;
+    screen_priv->flips_destroy      =   &present_winmode_flips_destroy;
+    screen_priv->re_execute         =   &present_winmode_re_execute;
+    screen_priv->queue_vblank       =   &present_winmode_queue_vblank;
+    screen_priv->get_crtc           =   &present_winmode_get_crtc;
+    screen_priv->query_capabilities =   &present_winmode_query_capabilities;
+    screen_priv->check_flip         =   &present_winmode_check_flip;
+    screen_priv->abort_vblank       =   &present_winmode_abort_vblank;
+    screen_priv->flush              =   &present_winmode_flush;
 }

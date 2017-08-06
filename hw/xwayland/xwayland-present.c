@@ -137,8 +137,8 @@ xwl_present_get_ust_msc(WindowPtr present_window, uint64_t *ust, uint64_t *msc)
 static int
 xwl_present_queue_vblank(WindowPtr present_window,
                          RRCrtcPtr crtc,
-                        uint64_t event_id,
-                        uint64_t msc)
+                         uint64_t event_id,
+                         uint64_t msc)
 {
     struct xwl_window *xwl_window = xwl_window_from_window(present_window);
     struct xwl_present_event *event;
@@ -193,9 +193,9 @@ xwl_present_flush(WindowPtr window)
 
 static Bool
 xwl_present_check_flip(RRCrtcPtr crtc,
-                      WindowPtr present_window,
-                      PixmapPtr pixmap,
-                      Bool sync_flip)
+                       WindowPtr present_window,
+                       PixmapPtr pixmap,
+                       Bool sync_flip)
 {
     /* We make sure compositing is active. TODOX: Is this always the case in Xwayland anyway? */
 #ifndef COMPOSITE

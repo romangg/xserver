@@ -122,7 +122,7 @@ static void
 present_clear_window_flip_winmode(WindowPtr window)
 {
     present_vblank_ptr          flip_pending;
-    present_window_priv_ptr window_priv = present_window_priv(window);
+    present_window_priv_ptr     window_priv = present_window_priv(window);
 
     flip_pending = window_priv->flip_pending;
 
@@ -142,10 +142,10 @@ present_clear_window_flip_winmode(WindowPtr window)
 static Bool
 present_destroy_window(WindowPtr window)
 {
-    Bool ret;
-    ScreenPtr screen = window->drawable.pScreen;
+    ScreenPtr               screen      = window->drawable.pScreen;
     present_screen_priv_ptr screen_priv = present_screen_priv(screen);
     present_window_priv_ptr window_priv = present_window_priv(window);
+    Bool ret;
 
     if (window_priv) {
         present_clear_window_notifies(window);

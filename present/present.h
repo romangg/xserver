@@ -47,9 +47,9 @@ typedef Bool (*present_queue_vblank_ptr) (RRCrtcPtr crtc,
                                           uint64_t event_id,
                                           uint64_t msc);
 typedef Bool (*present_queue_vblank_winmode_ptr) (WindowPtr window,
-                                                   RRCrtcPtr crtc,
-                                          uint64_t event_id,
-                                          uint64_t msc);
+                                                  RRCrtcPtr crtc,
+                                                  uint64_t event_id,
+                                                  uint64_t msc);
 
 /* Abort pending vblank. The extension is no longer interested in
  * 'event_id' which was to be notified at 'msc'. If possible, the
@@ -92,11 +92,11 @@ typedef Bool (*present_flip_ptr) (RRCrtcPtr crtc,
  *
  */
 typedef Bool (*present_flip_winmode_ptr) (WindowPtr window,
-                                           RRCrtcPtr crtc,
-                                           uint64_t event_id,
-                                           uint64_t target_msc,
-                                           PixmapPtr pixmap,
-                                           Bool sync_flip);
+                                          RRCrtcPtr crtc,
+                                          uint64_t event_id,
+                                          uint64_t target_msc,
+                                          PixmapPtr pixmap,
+                                          Bool sync_flip);
 
 /* Called when the flip with id 'flip_event_id' has been fully processed internally,
  * and the Extension is waiting with regards to this flip for the information,
@@ -139,15 +139,15 @@ typedef struct present_winmode_screen_info {
     uint32_t                            version;
 
     present_get_crtc_ptr                get_crtc;
-    present_get_ust_msc_winmode_ptr    get_ust_msc;
-    present_queue_vblank_winmode_ptr   queue_vblank;
-    present_abort_vblank_winmode_ptr   abort_vblank;
+    present_get_ust_msc_winmode_ptr     get_ust_msc;
+    present_queue_vblank_winmode_ptr    queue_vblank;
+    present_abort_vblank_winmode_ptr    abort_vblank;
     present_flush_ptr                   flush;
     uint32_t                            capabilities;
     present_check_flip_ptr              check_flip;
-    present_flip_winmode_ptr           flip;
+    present_flip_winmode_ptr            flip;
     present_flip_executed_ptr           flip_executed;
-    present_unflip_winmode_ptr         unflip;
+    present_unflip_winmode_ptr          unflip;
 
 } present_winmode_screen_info_rec, *present_winmode_screen_info_ptr;
 

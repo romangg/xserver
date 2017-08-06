@@ -446,21 +446,21 @@ present_pixmap(WindowPtr window,
         return BadAlloc;
 
     return screen_priv->present_pixmap(window_priv,
-                                   pixmap,
-                                   serial,
-                                   valid,
-                                   update,
-                                   x_off,
-                                   y_off,
-                                   target_crtc,
-                                   wait_fence,
-                                   idle_fence,
-                                   options,
-                                   window_msc,
-                                   divisor,
-                                   remainder,
-                                   notifies,
-                                   num_notifies);
+                                       pixmap,
+                                       serial,
+                                       valid,
+                                       update,
+                                       x_off,
+                                       y_off,
+                                       target_crtc,
+                                       wait_fence,
+                                       idle_fence,
+                                       options,
+                                       window_msc,
+                                       divisor,
+                                       remainder,
+                                       notifies,
+                                       num_notifies);
 }
 
 int

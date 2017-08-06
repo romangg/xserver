@@ -48,11 +48,11 @@ present_scrmode_flip_pending_pixmap(ScreenPtr screen)
 }
 
 static Bool
-present_scrmode_flip(RRCrtcPtr crtc,
-             uint64_t event_id,
-             uint64_t target_msc,
-             PixmapPtr pixmap,
-             Bool sync_flip)
+present_scrmode_flip(RRCrtcPtr  crtc,
+                     uint64_t   event_id,
+                     uint64_t   target_msc,
+                     PixmapPtr  pixmap,
+                     Bool       sync_flip)
 {
     ScreenPtr                   screen = crtc->pScreen;
     present_screen_priv_ptr     screen_priv = present_screen_priv(screen);
@@ -62,12 +62,12 @@ present_scrmode_flip(RRCrtcPtr crtc,
 
 static Bool
 present_scrmode_check_flip(RRCrtcPtr    crtc,
-                   WindowPtr    window,
-                   PixmapPtr    pixmap,
-                   Bool         sync_flip,
-                   RegionPtr    valid,
-                   int16_t      x_off,
-                   int16_t      y_off)
+                           WindowPtr    window,
+                           PixmapPtr    pixmap,
+                           Bool         sync_flip,
+                           RegionPtr    valid,
+                           int16_t      x_off,
+                           int16_t      y_off)
 {
     ScreenPtr                   screen = window->drawable.pScreen;
     PixmapPtr                   window_pixmap;
@@ -175,7 +175,7 @@ present_scrmode_queue_vblank(ScreenPtr screen,
                              uint64_t event_id,
                              uint64_t msc)
 {
-    Bool                        ret;
+    Bool ret;
 
     if (crtc == NULL)
         ret = present_fake_queue_vblank(screen, NULL, event_id, msc);
@@ -190,7 +190,7 @@ present_scrmode_queue_vblank(ScreenPtr screen,
 static int
 present_scrmode_get_ust_msc(ScreenPtr screen, RRCrtcPtr crtc, uint64_t *ust, uint64_t *msc)
 {
-    present_screen_priv_ptr     screen_priv = present_screen_priv(screen);
+    present_screen_priv_ptr screen_priv = present_screen_priv(screen);
 
     if (crtc == NULL)
         return present_fake_get_ust_msc(screen, ust, msc);
@@ -205,7 +205,7 @@ present_scrmode_get_ust_msc(ScreenPtr screen, RRCrtcPtr crtc, uint64_t *ust, uin
 static void
 present_scrmode_re_execute(present_vblank_ptr vblank)
 {
-    uint64_t            ust = 0, crtc_msc = 0;
+    uint64_t ust = 0, crtc_msc = 0;
 
     if (vblank->crtc)
         (void) present_scrmode_get_ust_msc(vblank->screen, vblank->crtc, &ust, &crtc_msc);
@@ -216,7 +216,7 @@ present_scrmode_re_execute(present_vblank_ptr vblank)
 static void
 present_scrmode_flip_try_ready(ScreenPtr screen)
 {
-    present_vblank_ptr  vblank;
+    present_vblank_ptr vblank;
 
     xorg_list_for_each_entry(vblank, &present_flip_queue, event_queue) {
         if (vblank->queued) {
@@ -250,9 +250,9 @@ void
 present_scrmode_restore_screen_pixmap(ScreenPtr screen)
 {
     present_screen_priv_ptr screen_priv = present_screen_priv(screen);
-    PixmapPtr screen_pixmap = (*screen->GetScreenPixmap)(screen);
-    PixmapPtr flip_pixmap;
-    WindowPtr flip_window;
+    PixmapPtr               screen_pixmap = (*screen->GetScreenPixmap)(screen);
+    PixmapPtr               flip_pixmap;
+    WindowPtr               flip_window;
 
     if (screen_priv->flip_pending) {
         flip_window = screen_priv->flip_pending->window;
@@ -397,7 +397,6 @@ present_scrmode_check_flip_window (WindowPtr window)
     present_screen_priv_ptr     screen_priv = present_screen_priv(screen);
     present_window_priv_ptr     window_priv = present_window_priv(window);
     present_vblank_ptr          flip_pending;
-//    present_vblank_ptr          flip_active;
     present_vblank_ptr          vblank;
 
     /* If this window hasn't ever been used with Present, it can't be
@@ -588,21 +587,21 @@ present_scrmode_window_to_crtc_msc(WindowPtr window, RRCrtcPtr crtc, uint64_t wi
 
 static int
 present_scrmode_present_pixmap(present_window_priv_ptr window_priv,
-               PixmapPtr pixmap,
-               CARD32 serial,
-               RegionPtr valid,
-               RegionPtr update,
-               int16_t x_off,
-               int16_t y_off,
-               RRCrtcPtr target_crtc,
-               SyncFence *wait_fence,
-               SyncFence *idle_fence,
-               uint32_t options,
-               uint64_t window_msc,
-               uint64_t divisor,
-               uint64_t remainder,
-               present_notify_ptr notifies,
-               int num_notifies)
+                               PixmapPtr pixmap,
+                               CARD32 serial,
+                               RegionPtr valid,
+                               RegionPtr update,
+                               int16_t x_off,
+                               int16_t y_off,
+                               RRCrtcPtr target_crtc,
+                               SyncFence *wait_fence,
+                               SyncFence *idle_fence,
+                               uint32_t options,
+                               uint64_t window_msc,
+                               uint64_t divisor,
+                               uint64_t remainder,
+                               present_notify_ptr notifies,
+                               int num_notifies)
 {
     WindowPtr                   window = window_priv->window;
     ScreenPtr                   screen = window->drawable.pScreen;
@@ -665,20 +664,20 @@ present_scrmode_present_pixmap(present_window_priv_ptr window_priv,
     }
 
     vblank = present_create_vblank(window_priv,
-                                pixmap,
-                                serial,
-                                valid,
-                                update,
-                                x_off,
-                                y_off,
-                                target_crtc,
-                                wait_fence,
-                                idle_fence,
-                                options,
-                                notifies,
-                                num_notifies,
-                                &target_msc,
-                                crtc_msc);
+                                   pixmap,
+                                   serial,
+                                   valid,
+                                   update,
+                                   x_off,
+                                   y_off,
+                                   target_crtc,
+                                   wait_fence,
+                                   idle_fence,
+                                   options,
+                                   notifies,
+                                   num_notifies,
+                                   &target_msc,
+                                   crtc_msc);
 
     if (!vblank)
         return BadAlloc;
@@ -746,17 +745,17 @@ present_scrmode_abort_vblank(ScreenPtr screen, WindowPtr window, RRCrtcPtr crtc,
 void
 present_scrmode_init_scrmode(present_screen_priv_ptr screen_priv)
 {
-    screen_priv->check_flip_window = &present_scrmode_check_flip_window;
-    screen_priv->create_event_id = &present_scrmode_create_event_id;
-    screen_priv->present_pixmap = &present_scrmode_present_pixmap;
-    screen_priv->flips_destroy = &present_scrmode_flip_destroy;
-    screen_priv->re_execute = &present_scrmode_re_execute;
-    screen_priv->queue_vblank = &present_scrmode_queue_vblank;
-    screen_priv->get_crtc = &present_scrmode_get_crtc;
-    screen_priv->query_capabilities = &present_scrmode_query_capabilities;
-    screen_priv->check_flip = &present_scrmode_check_flip;
-    screen_priv->abort_vblank = &present_scrmode_abort_vblank;
-    screen_priv->flush = &present_scrmode_flush;
+    screen_priv->check_flip_window  =   &present_scrmode_check_flip_window;
+    screen_priv->create_event_id    =   &present_scrmode_create_event_id;
+    screen_priv->present_pixmap     =   &present_scrmode_present_pixmap;
+    screen_priv->flips_destroy      =   &present_scrmode_flip_destroy;
+    screen_priv->re_execute         =   &present_scrmode_re_execute;
+    screen_priv->queue_vblank       =   &present_scrmode_queue_vblank;
+    screen_priv->get_crtc           =   &present_scrmode_get_crtc;
+    screen_priv->query_capabilities =   &present_scrmode_query_capabilities;
+    screen_priv->check_flip         =   &present_scrmode_check_flip;
+    screen_priv->abort_vblank       =   &present_scrmode_abort_vblank;
+    screen_priv->flush              =   &present_scrmode_flush;
 }
 
 Bool
