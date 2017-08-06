@@ -210,16 +210,22 @@ present_clip_notify(WindowPtr window, int dx, int dy)
     wrap(screen_priv, screen, ClipNotify, present_clip_notify);
 }
 
+static Bool
+present_screen_register_priv_keys(void)
+{
+    if (!dixRegisterPrivateKey(&present_screen_private_key, PRIVATE_SCREEN, 0))
+        return FALSE;
+
+    if (!dixRegisterPrivateKey(&present_window_private_key, PRIVATE_WINDOW, 0))
+        return FALSE;
+
+    return TRUE;
+}
+
 static present_screen_priv_ptr
 present_screen_priv_init(ScreenPtr screen)
 {
     present_screen_priv_ptr screen_priv;
-
-    if (!dixRegisterPrivateKey(&present_screen_private_key, PRIVATE_SCREEN, 0))
-        return NULL;
-
-    if (!dixRegisterPrivateKey(&present_window_private_key, PRIVATE_WINDOW, 0))
-        return NULL;
 
     screen_priv = calloc(1, sizeof (present_screen_priv_rec));
     if (!screen_priv)
@@ -237,11 +243,14 @@ present_screen_priv_init(ScreenPtr screen)
 }
 
 /*
- * Initialize a screen for use with present
+ * Initialize a screen for use with present in default screen mode
  */
 int
 present_screen_init(ScreenPtr screen, present_screen_info_ptr info)
 {
+    if (!present_screen_register_priv_keys())
+        return FALSE;
+
     if (!present_screen_priv(screen)) {
         present_screen_priv_ptr screen_priv = present_screen_priv_init(screen);
         if (!screen_priv)
@@ -262,6 +271,9 @@ present_screen_init(ScreenPtr screen, present_screen_info_ptr info)
 int
 present_winmode_screen_init(ScreenPtr screen, present_winmode_screen_info_ptr info)
 {
+    if (!present_screen_register_priv_keys())
+        return FALSE;
+
     if (!present_screen_priv(screen)) {
         present_screen_priv_ptr screen_priv = present_screen_priv_init(screen);
         if (!screen_priv)
@@ -270,7 +282,7 @@ present_winmode_screen_init(ScreenPtr screen, present_winmode_screen_info_ptr in
         screen_priv->winmode_info = info;
         present_winmode_init_winmode(screen_priv);
 
-        present_fake_screen_init(screen);   //TODOX: not needed in winmode?
+        present_fake_screen_init(screen);
     }
 
     return TRUE;
