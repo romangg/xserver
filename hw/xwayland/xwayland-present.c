@@ -37,7 +37,7 @@ xwl_present_check_events(struct xwl_window *xwl_window)
 
     xorg_list_for_each_entry_safe(event, tmp, &xwl_window->present_event_list, list) {
         if (event->target_msc <= msc) {
-            present_event_notify(event->event_id, 0, msc);
+            present_winmode_event_notify(xwl_window->present_window, event->event_id, 0, msc);
             xorg_list_del(&event->list);
             free(event);
         }
@@ -60,7 +60,7 @@ xwl_present_unrealize(WindowPtr window)
     /* Clear remaining buffer releases */
     xorg_list_for_each_entry_safe(event, tmp, &xwl_present_release, list) {
         if (event->xwl_window == xwl_window) {
-            present_event_notify(event->event_id, 0, xwl_window->present_msc);
+            present_winmode_event_notify(window, event->event_id, 0, xwl_window->present_msc);
             xorg_list_del(&event->list);
             free(event);
         }
@@ -75,9 +75,13 @@ buffer_release(void *data, struct wl_buffer *buffer)
     struct xwl_window           *xwl_window = wl_buffer_get_user_data(buffer);
     struct xwl_present_event    *event, *tmp;
 
+    // TODOX: instead data as the present_window and then get xwl_window?
+    if (!xwl_window->present_window)
+        return;
+
     xorg_list_for_each_entry_safe(event, tmp, &xwl_present_release, list) {
         if (event->xwl_window == xwl_window && event->buffer == buffer) {
-            present_event_notify(event->event_id, 0, xwl_window->present_msc);
+            present_winmode_event_notify(xwl_window->present_window, event->event_id, 0, xwl_window->present_msc);
             xorg_list_del(&event->list);
             free(event);
             break;
@@ -207,6 +211,7 @@ xwl_present_check_flip(RRCrtcPtr crtc,
 
     if (!xwl_window)
         return FALSE;
+
     if (!xwl_window->present_crtc_fake)
         return FALSE;
     /* Make sure the client doesn't try to flip to another crtc
@@ -329,7 +334,7 @@ xwl_present_flip_executed(WindowPtr present_window, RRCrtcPtr crtc, uint64_t eve
     wl_surface_commit(xwl_window->present_surface);
     wl_display_flush(xwl_window->xwl_screen->display);
 
-    present_event_notify(event_id, 0, xwl_window->present_msc);
+    present_winmode_event_notify(present_window, event_id, 0, xwl_window->present_msc);
 }
 
 static void
@@ -341,7 +346,7 @@ xwl_present_unflip(WindowPtr window, uint64_t event_id)
         xwl_present_cleanup_surfaces(xwl_window);
         xwl_window->present_window = NULL;
     }
-    present_event_notify(event_id, 0, 0);
+    present_winmode_event_notify(window, event_id, 0, 0);
 }
 
 static present_winmode_screen_info_rec xwl_present_info = {
