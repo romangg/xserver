@@ -109,9 +109,9 @@ static const struct wl_callback_listener present_frame_listener = {
 };
 
 static RRCrtcPtr
-xwl_present_get_crtc(WindowPtr window)
+xwl_present_get_crtc(WindowPtr present_window)
 {
-    struct xwl_window *xwl_window = xwl_window_from_window(window);
+    struct xwl_window *xwl_window = xwl_window_from_window(present_window);
     if (xwl_window == NULL)
         return NULL;
 
@@ -119,9 +119,9 @@ xwl_present_get_crtc(WindowPtr window)
 }
 
 static int
-xwl_present_get_ust_msc(RRCrtcPtr crtc, CARD64 *ust, CARD64 *msc)
+xwl_present_get_ust_msc(WindowPtr present_window, uint64_t *ust, uint64_t *msc)
 {
-    struct xwl_window *xwl_window = crtc->devPrivate;
+    struct xwl_window *xwl_window = xwl_window_from_window(present_window);
     if (!xwl_window)
         return BadAlloc;
     *ust = 0;
@@ -135,11 +135,12 @@ xwl_present_get_ust_msc(RRCrtcPtr crtc, CARD64 *ust, CARD64 *msc)
  * MSC has past
  */
 static int
-xwl_present_queue_vblank(RRCrtcPtr crtc,
+xwl_present_queue_vblank(WindowPtr present_window,
+                         RRCrtcPtr crtc,
                         uint64_t event_id,
                         uint64_t msc)
 {
-    struct xwl_window *xwl_window = crtc->devPrivate;
+    struct xwl_window *xwl_window = xwl_window_from_window(present_window);
     struct xwl_present_event *event;
 
     /*
@@ -169,9 +170,9 @@ xwl_present_queue_vblank(RRCrtcPtr crtc,
  * to the extension
  */
 static void
-xwl_present_abort_vblank(RRCrtcPtr crtc, uint64_t event_id, uint64_t msc)
+xwl_present_abort_vblank(WindowPtr present_window, RRCrtcPtr crtc, uint64_t event_id, uint64_t msc)
 {
-    struct xwl_window *xwl_window = crtc->devPrivate;
+    struct xwl_window *xwl_window = xwl_window_from_window(present_window);
     struct xwl_present_event *event, *tmp;
 
     xorg_list_for_each_entry_safe(event, tmp, &xwl_window->present_event_list, list) {
@@ -192,7 +193,7 @@ xwl_present_flush(WindowPtr window)
 
 static Bool
 xwl_present_check_flip(RRCrtcPtr crtc,
-                      WindowPtr window,
+                      WindowPtr present_window,
                       PixmapPtr pixmap,
                       Bool sync_flip)
 {
@@ -202,7 +203,7 @@ xwl_present_check_flip(RRCrtcPtr crtc,
 #endif
     /* we can't take crtc->devPrivate because window might have been reparented and
      * the former parent xwl_window destroyed */
-    struct xwl_window *xwl_window = xwl_window_from_window(window);
+    struct xwl_window *xwl_window = xwl_window_from_window(present_window);
 
     if (!xwl_window)
         return FALSE;
@@ -215,11 +216,11 @@ xwl_present_check_flip(RRCrtcPtr crtc,
         return FALSE;
 
     /* In order to reduce complexity, we currently allow only one subsurface, i.e. one completely visible region */
-    if (RegionNumRects(&window->clipList) > 1)
+    if (RegionNumRects(&present_window->clipList) > 1)
         return FALSE;
 
-    if (xwl_window->present_window != window) {
-        xwl_window->present_window = window;
+    if (xwl_window->present_window != present_window) {
+        xwl_window->present_window = present_window;
         xwl_window->present_need_configure = TRUE;
     }
     return TRUE;
@@ -237,16 +238,16 @@ xwl_present_cleanup_surfaces(struct xwl_window *xwl_window)
 }
 
 static Bool
-xwl_present_flip(RRCrtcPtr crtc,
-                uint64_t event_id,
-                uint64_t target_msc,
-                PixmapPtr pixmap,
-                Bool sync_flip)
+xwl_present_flip(WindowPtr present_window,
+                 RRCrtcPtr crtc,
+                 uint64_t event_id,
+                 uint64_t target_msc,
+                 PixmapPtr pixmap,
+                 Bool sync_flip)
 {
-    struct xwl_window           *xwl_window = crtc->devPrivate;
+    struct xwl_window           *xwl_window = xwl_window_from_window(present_window);
     struct xwl_screen           *xwl_screen = xwl_window->xwl_screen;
     WindowPtr                   window = xwl_window->window;
-    WindowPtr                   present_window = xwl_window->present_window;
     BoxPtr                      win_box, present_box;
     Bool                        buffer_created;
     struct wl_buffer            *buffer;
@@ -317,9 +318,9 @@ xwl_present_flip(RRCrtcPtr crtc,
 }
 
 static void
-xwl_present_flip_executed(RRCrtcPtr crtc, uint64_t event_id, RegionPtr damage)
+xwl_present_flip_executed(WindowPtr present_window, RRCrtcPtr crtc, uint64_t event_id, RegionPtr damage)
 {
-    struct xwl_window *xwl_window = crtc->devPrivate;
+    struct xwl_window *xwl_window = xwl_window_from_window(present_window);
     BoxPtr box = RegionExtents(damage);
 
     wl_surface_damage(xwl_window->present_surface, box->x1, box->y1,
@@ -343,9 +344,9 @@ xwl_present_unflip(WindowPtr window, uint64_t event_id)
     present_event_notify(event_id, 0, 0);
 }
 
-static present_rootless_screen_info_rec xwl_present_info = {
+static present_winmode_screen_info_rec xwl_present_info = {
     .version = PRESENT_SCREEN_INFO_VERSION,
-//    .get_crtc = xwl_present_get_crtc,
+    .get_crtc = xwl_present_get_crtc,
 
     .get_ust_msc = xwl_present_get_ust_msc,
     .queue_vblank = xwl_present_queue_vblank,
@@ -364,5 +365,5 @@ Bool
 xwl_present_init(ScreenPtr screen)
 {
     xorg_list_init(&xwl_present_release);
-    return present_rootless_screen_init(screen, &xwl_present_info);
+    return present_winmode_screen_init(screen, &xwl_present_info);
 }
