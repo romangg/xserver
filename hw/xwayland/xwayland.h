@@ -291,8 +291,6 @@ struct xwl_output {
 
 struct xwl_pixmap;
 
-struct xwl_window *xwl_window_from_window(WindowPtr window);
-
 void xwl_sync_events (struct xwl_screen *xwl_screen);
 
 Bool xwl_screen_init_cursor(struct xwl_screen *xwl_screen);
