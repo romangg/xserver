@@ -223,7 +223,7 @@ present_execute_wait(present_vblank_ptr vblank, uint64_t crtc_msc)
 }
 
 void
-present_execute_flip_recover(present_vblank_ptr vblank, uint64_t crtc_msc)
+present_execute_copy(present_vblank_ptr vblank, uint64_t crtc_msc)
 {
     WindowPtr                   window = vblank->window;
     ScreenPtr                   screen = window->drawable.pScreen;
@@ -252,7 +252,7 @@ present_execute_flip_recover(present_vblank_ptr vblank, uint64_t crtc_msc)
 }
 
 void
-present_execute_complete(present_vblank_ptr vblank, uint64_t ust, uint64_t crtc_msc)
+present_execute_post(present_vblank_ptr vblank, uint64_t ust, uint64_t crtc_msc)
 {
     uint8_t mode;
 

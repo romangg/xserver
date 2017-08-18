@@ -540,7 +540,7 @@ present_scrmode_execute(present_vblank_ptr vblank, uint64_t ust, uint64_t crtc_m
                 present_scrmode_unflip(screen);
         }
 
-        present_execute_flip_recover(vblank, crtc_msc);
+        present_execute_copy(vblank, crtc_msc);
 
         if (vblank->queued) {
             xorg_list_add(&vblank->event_queue, &present_exec_queue);
@@ -550,7 +550,7 @@ present_scrmode_execute(present_vblank_ptr vblank, uint64_t ust, uint64_t crtc_m
         }
     }
 
-    present_execute_complete(vblank, ust, crtc_msc);
+    present_execute_post(vblank, ust, crtc_msc);
 }
 
 static void

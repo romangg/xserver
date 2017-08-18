@@ -87,7 +87,6 @@ present_winmode_flip_try_ready(WindowPtr window)
     present_window_priv_ptr window_priv = present_window_priv(window);
     present_vblank_ptr      vblank;
 
-
     xorg_list_for_each_entry(vblank, &window_priv->flip_queue, event_queue) {
         if (vblank->queued) {
             present_winmode_re_execute(vblank);
@@ -102,6 +101,7 @@ present_winmode_flip_idle_vblank(present_vblank_ptr vblank)
     present_pixmap_idle(vblank->pixmap, vblank->window,
                         vblank->serial, vblank->idle_fence);
 
+    //TODOX:
     /* Don't destroy these objects in the subsequent vblank destruction. */
     vblank->pixmap = NULL;
     vblank->idle_fence = NULL;
@@ -118,6 +118,7 @@ present_winmode_flip_idle_active(WindowPtr window)
         present_winmode_flip_idle_vblank(window_priv->flip_active);
         window_priv->flip_active = NULL;
     }
+    // TODOX:
 //    /* if we lose the active flip, the flipping window could be reparented and the DDX
 //     * delete the crtc
 //     */
@@ -204,6 +205,7 @@ present_winmode_unflip(WindowPtr window)
     assert (!window_priv->flip_pending);
 
     present_winmode_restore_window_pixmap(window);
+    //TODOX:
     present_winmode_free_idle_vblanks(window);
 
     window_priv->unflip_event_id = ++window_priv->event_id;
@@ -282,6 +284,7 @@ present_winmode_event_notify(WindowPtr window, uint64_t event_id, uint64_t ust, 
     if (event_id == window_priv->unflip_event_id) {
         DebugPresent(("\tun %lld\n", event_id));
         window_priv->unflip_event_id = 0;
+        //TODOX:
         present_winmode_flip_idle_active(window_priv->window);
         present_winmode_flip_try_ready(window_priv->window);
     }
@@ -482,7 +485,8 @@ present_winmode_execute(present_vblank_ptr vblank, uint64_t ust, uint64_t crtc_m
         else if (!window_priv->unflip_event_id && window_priv->flip_active)
             present_winmode_unflip(window);
 
-        present_execute_flip_recover(vblank, crtc_msc);
+        present_execute_copy(vblank, crtc_msc);
+
         if (vblank->queued) {
             xorg_list_add(&vblank->event_queue, &window_priv->exec_queue);
 
@@ -490,7 +494,7 @@ present_winmode_execute(present_vblank_ptr vblank, uint64_t ust, uint64_t crtc_m
         }
     }
 
-    present_execute_complete(vblank, ust, crtc_msc);
+    present_execute_post(vblank, ust, crtc_msc);
 }
 
 static void
