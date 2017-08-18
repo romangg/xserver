@@ -118,6 +118,7 @@ struct xwl_window {
 
     /* Present */
     RRCrtcPtr present_crtc_fake;
+    struct xorg_list present_link;
     WindowPtr present_window;
     Bool present_need_configure;
     struct wl_surface *present_surface;
@@ -125,6 +126,7 @@ struct xwl_window {
     uint64_t present_msc;
     struct wl_callback *present_frame_callback;
     struct xorg_list present_event_list;
+    struct xorg_list present_release_queue;
 };
 
 struct xwl_present_event {
@@ -349,7 +351,7 @@ struct wl_buffer *xwl_glamor_pixmap_get_wl_buffer(PixmapPtr pixmap, unsigned sho
 
 Bool xwl_present_init(ScreenPtr screen);
 
-void xwl_present_unrealize(WindowPtr window);
+void xwl_present_cleanup(WindowPtr window);
 
 void xwl_screen_release_tablet_manager(struct xwl_screen *xwl_screen);
 

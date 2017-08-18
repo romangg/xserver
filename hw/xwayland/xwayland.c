@@ -478,6 +478,7 @@ xwl_realize_window(WindowPtr window)
         goto err;
     }
     xorg_list_init(&xwl_window->present_event_list);
+    xorg_list_init(&xwl_window->present_release_queue);
 
     if (!xwl_screen->rootless) {
         xwl_window->shell_surface =
@@ -569,8 +570,8 @@ xwl_unrealize_window(WindowPtr window)
         xwl_seat_clear_touch(xwl_seat, window);
     }
 
-    /* We do this always (in case we were presenting a child window) */
-    xwl_present_unrealize(window);
+    /* We do this always (in case we were presenting on a child window) */
+    xwl_present_cleanup(window);
 
     screen->UnrealizeWindow = xwl_screen->UnrealizeWindow;
     ret = (*screen->UnrealizeWindow) (window);
@@ -590,15 +591,6 @@ xwl_unrealize_window(WindowPtr window)
     DamageDestroy(xwl_window->damage);
     if (xwl_window->frame_callback)
         wl_callback_destroy(xwl_window->frame_callback);
-
-    if (xwl_window->present_frame_callback)
-        wl_callback_destroy(xwl_window->present_frame_callback);
-
-    /* Clear remaining present events */
-    xorg_list_for_each_entry_safe(event, tmp, &xwl_window->present_event_list, list) {
-        xorg_list_del(&event->list);
-        free(event);
-    }
 
     if (xwl_window->present_crtc_fake)
         RRCrtcDestroy(xwl_window->present_crtc_fake);

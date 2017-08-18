@@ -27,10 +27,87 @@
 
 #include <present.h>
 
-static struct xorg_list xwl_present_release;    //TODOX: integrate into xwl_window struct?
+static struct xorg_list xwl_present_windows;
+
+void
+xwl_present_cleanup(WindowPtr window)
+{
+    struct xwl_window           *xwl_window = xwl_window_get(window);
+    struct xwl_present_event    *event, *tmp;
+
+    if (!xwl_window)
+        return;
+
+    if (xwl_window->present_window != window)
+        return;
+
+    if (xwl_window->present_frame_callback) {
+        wl_callback_destroy(xwl_window->present_frame_callback);
+        xwl_window->present_frame_callback = NULL;
+    }
+
+    /* Clear surfaces  */
+    if (xwl_window->present_subsurface) {
+        wl_subsurface_destroy(xwl_window->present_subsurface);
+        wl_surface_destroy(xwl_window->present_surface);
+        xwl_window->present_subsurface = NULL;
+    }
+
+    /* Reset base data */
+    xorg_list_del(&xwl_window->present_link);
+    xwl_window->present_surface = NULL;
+    xwl_window->present_window = NULL;
+    xwl_window->present_need_configure = TRUE;
+
+    /* Clear remaining events */
+    xorg_list_for_each_entry_safe(event, tmp, &xwl_window->present_event_list, list) {
+        xorg_list_del(&event->list);
+        free(event);
+    }
+
+    /* Clear remaining buffer releases and inform Present about free ressources */
+    xorg_list_for_each_entry_safe(event, tmp, &xwl_window->present_release_queue, list) {
+        present_winmode_event_notify(xwl_window->window, event->event_id, 0, xwl_window->present_msc);
+        xorg_list_del(&event->list);
+        free(event);
+    }
+}
 
 static void
-xwl_present_check_events(struct xwl_window *xwl_window)
+buffer_release(void *data, struct wl_buffer *buffer)
+{
+    WindowPtr                   present_window = wl_buffer_get_user_data(buffer);
+    struct xwl_window           *xwl_window;
+    struct xwl_present_event    *event, *tmp;
+    Bool                        found_window = FALSE;
+
+    /* Find window */
+    xorg_list_for_each_entry(xwl_window, &xwl_present_windows, present_link) {
+        if (xwl_window->present_window == present_window) {
+            found_window = TRUE;
+            break;
+        }
+    }
+
+    if (!found_window)
+        return;
+
+    xorg_list_for_each_entry_safe(event, tmp, &xwl_window->present_release_queue, list) {
+        if (event->buffer == buffer) {
+            present_winmode_event_notify(present_window, event->event_id, 0, xwl_window->present_msc);
+            xorg_list_del(&event->list);
+            free(event);
+            break;
+        }
+    }
+}
+
+static const struct wl_buffer_listener release_listener = {
+    buffer_release
+};
+
+static void
+xwl_present_events_notify(struct xwl_window *xwl_window)
 {
     uint64_t                    msc = xwl_window->present_msc;
     struct xwl_present_event    *event, *tmp;
@@ -44,55 +121,6 @@ xwl_present_check_events(struct xwl_window *xwl_window)
     }
 }
 
-void
-xwl_present_unrealize(WindowPtr window)
-{
-    struct xwl_window           *xwl_window = xwl_window_get(window);
-    struct xwl_present_event    *event, *tmp;
-
-    if (xwl_window == NULL)
-        return;
-    if (!xwl_window->present_window )
-        return;
-    if (xwl_window->present_window != window)
-        return;
-
-    /* Clear remaining buffer releases */
-    xorg_list_for_each_entry_safe(event, tmp, &xwl_present_release, list) {
-        if (event->xwl_window == xwl_window) {
-            present_winmode_event_notify(window, event->event_id, 0, xwl_window->present_msc);
-            xorg_list_del(&event->list);
-            free(event);
-        }
-    }
-
-    xwl_window->present_window = NULL;
-}
-
-static void
-buffer_release(void *data, struct wl_buffer *buffer)
-{
-    struct xwl_window           *xwl_window = wl_buffer_get_user_data(buffer);
-    struct xwl_present_event    *event, *tmp;
-
-    // TODOX: instead data as the present_window and then get xwl_window?
-    if (!xwl_window->present_window)
-        return;
-
-    xorg_list_for_each_entry_safe(event, tmp, &xwl_present_release, list) {
-        if (event->xwl_window == xwl_window && event->buffer == buffer) {
-            present_winmode_event_notify(xwl_window->present_window, event->event_id, 0, xwl_window->present_msc);
-            xorg_list_del(&event->list);
-            free(event);
-            break;
-        }
-    }
-}
-
-static const struct wl_buffer_listener release_listener = {
-    buffer_release
-};
-
 static void
 present_frame_callback(void *data,
                struct wl_callback *callback,
@@ -100,12 +128,15 @@ present_frame_callback(void *data,
 {
     struct xwl_window *xwl_window = data;
 
+    if (!xwl_window->present_frame_callback)
+        return;
+
     wl_callback_destroy(xwl_window->present_frame_callback);
     xwl_window->present_frame_callback = NULL;
 
     xwl_window->present_msc++;
 
-    xwl_present_check_events(xwl_window);
+    xwl_present_events_notify(xwl_window);
 }
 
 static const struct wl_callback_listener present_frame_listener = {
@@ -212,6 +243,7 @@ xwl_present_check_flip(RRCrtcPtr crtc,
     if (!xwl_window)
         return FALSE;
 
+    // TODOX: remove the crtc checks?
     if (!xwl_window->present_crtc_fake)
         return FALSE;
     /* Make sure the client doesn't try to flip to another crtc
@@ -220,26 +252,19 @@ xwl_present_check_flip(RRCrtcPtr crtc,
     if (xwl_window->present_crtc_fake != crtc)
         return FALSE;
 
-    /* In order to reduce complexity, we currently allow only one subsurface, i.e. one completely visible region */
+    // TODOX: remove this check? does it make sense at all?
+    /* In order to reduce complexity, we currently allow only one subsurface, i.e. one completely visible region. */
     if (RegionNumRects(&present_window->clipList) > 1)
         return FALSE;
 
+    /* We always switch to another child window, if it wants to present. */
     if (xwl_window->present_window != present_window) {
+        if (xwl_window->present_window)
+            xwl_present_cleanup(xwl_window->present_window);
         xwl_window->present_window = present_window;
         xwl_window->present_need_configure = TRUE;
     }
     return TRUE;
-}
-
-static void
-xwl_present_cleanup_surfaces(struct xwl_window *xwl_window)
-{
-    if (xwl_window->present_subsurface) {
-        wl_subsurface_destroy(xwl_window->present_subsurface);
-        wl_surface_destroy(xwl_window->present_surface);
-        xwl_window->present_subsurface = NULL;
-    }
-    xwl_window->present_surface = NULL;
 }
 
 static Bool
@@ -264,7 +289,8 @@ xwl_present_flip(WindowPtr present_window,
 
     if (xwl_window->present_need_configure) {
         xwl_window->present_need_configure = FALSE;
-        xwl_present_cleanup_surfaces(xwl_window);
+
+        xorg_list_add(&xwl_window->present_link, &xwl_present_windows);
 
         if (RegionEqual(&window->winSize, &present_window->winSize)) {
             ErrorF("XX xwl_present_flip MAIN\n");
@@ -285,7 +311,7 @@ xwl_present_flip(WindowPtr present_window,
             wl_surface_set_input_region(xwl_window->present_surface, input_region);
             wl_region_destroy(input_region);
 
-            wl_subsurface_set_position(xwl_window->present_subsurface,
+            wl_subsurface_set_position(xwl_window->present_subsurface,  //TODOX: do this every frame in case the child window is moved inside the parent window?
                                        present_box->x1 - win_box->x1,
                                        present_box->y1 - win_box->y1);
         }
@@ -306,12 +332,12 @@ xwl_present_flip(WindowPtr present_window,
     event->xwl_window = xwl_window;
     event->buffer = buffer;
 
-    xorg_list_add(&event->list, &xwl_present_release);
+    xorg_list_add(&event->list, &xwl_window->present_release_queue);
 
     if (buffer_created)
         wl_buffer_add_listener(buffer, &release_listener, NULL);
 
-    wl_buffer_set_user_data(buffer, xwl_window);
+    wl_buffer_set_user_data(buffer, present_window);
     wl_surface_attach(xwl_window->present_surface, buffer, 0, 0);
 
     if (!xwl_window->present_frame_callback) {
@@ -340,12 +366,7 @@ xwl_present_flip_executed(WindowPtr present_window, RRCrtcPtr crtc, uint64_t eve
 static void
 xwl_present_unflip(WindowPtr window, uint64_t event_id)
 {
-    struct xwl_window   *xwl_window = xwl_window_get(window);
-
-    if(xwl_window) {
-        xwl_present_cleanup_surfaces(xwl_window);
-        xwl_window->present_window = NULL;
-    }
+    xwl_present_cleanup(window);
     present_winmode_event_notify(window, event_id, 0, 0);
 }
 
@@ -369,6 +390,6 @@ static present_winmode_screen_info_rec xwl_present_info = {
 Bool
 xwl_present_init(ScreenPtr screen)
 {
-    xorg_list_init(&xwl_present_release);
+    xorg_list_init(&xwl_present_windows);
     return present_winmode_screen_init(screen, &xwl_present_info);
 }
