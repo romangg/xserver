@@ -106,10 +106,10 @@ typedef struct present_window_priv {
     RRCrtcPtr              crtc;        /* Last reported CRTC from get_ust_msc */
     uint64_t               msc_offset;
     uint64_t               msc;         /* Last reported MSC from the current crtc */
-    struct xorg_list       vblank;
+    struct xorg_list       vblank_queue;
     struct xorg_list       notifies;
 
-    /* Below for winmode mode */
+    /* Below for window mode */
     uint64_t         event_id;
     struct xorg_list exec_queue;
     struct xorg_list flip_queue;

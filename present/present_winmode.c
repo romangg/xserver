@@ -206,7 +206,6 @@ present_winmode_flip_notify(present_vblank_ptr vblank, uint64_t ust, uint64_t cr
 {
     WindowPtr                   window = vblank->window;
     present_window_priv_ptr     window_priv = present_window_priv(window);
-    present_vblank_ptr          prev_vblank;
 
     DebugPresent(("\tn %lld %p %8lld: %08lx -> %08lx\n",
                   vblank->event_id, vblank, vblank->target_msc,
@@ -217,11 +216,10 @@ present_winmode_flip_notify(present_vblank_ptr vblank, uint64_t ust, uint64_t cr
 
     xorg_list_del(&vblank->event_queue);
 
-    if (window_priv->flip_active) {
+    if (window_priv->flip_active)
         /* Put the flip back in the window_list and wait for further notice from DDX */
-        prev_vblank = window_priv->flip_active;
-        xorg_list_append(&prev_vblank->event_queue, &window_priv->idle_queue);
-    }
+        xorg_list_append(&window_priv->flip_active->event_queue, &window_priv->idle_queue);
+
     window_priv->flip_active = vblank;
     window_priv->flip_pending = NULL;
 
@@ -383,7 +381,7 @@ present_winmode_flip(WindowPtr window,
  * Once the required MSC has been reached, execute the pending request.
  *
  * For requests to actually present something, either blt contents to
- * the screen or queue a frame buffer swap.
+ * the window pixmap or queue a frame buffer swap.
  *
  * For requests to just get the current MSC/UST combo, skip that part and
  * go straight to event delivery
@@ -556,7 +554,7 @@ present_winmode_present_pixmap(present_window_priv_ptr window_priv,
                            remainder);
 
     if (!update && pixmap) {
-        xorg_list_for_each_entry_safe(vblank, tmp, &window_priv->vblank, window_list) {
+        xorg_list_for_each_entry_safe(vblank, tmp, &window_priv->vblank_queue, window_list) {
 
             if (!vblank->pixmap)
                 continue;
@@ -565,10 +563,6 @@ present_winmode_present_pixmap(present_window_priv_ptr window_priv,
                 continue;
 
             if (vblank->target_msc != target_msc)
-                continue;
-
-            //TODOX: remove?
-            if (vblank->window != window)
                 continue;
 
             present_scrap_obsolete_vblank(vblank);
@@ -635,7 +629,6 @@ present_winmode_abort_vblank(ScreenPtr screen, WindowPtr window, RRCrtcPtr crtc,
         present_fake_abort_vblank(screen, window, event_id, msc);
     else {
         present_screen_priv_ptr screen_priv = present_screen_priv(screen);
-
         (*screen_priv->winmode_info->abort_vblank) (window, crtc, event_id, msc);
     }
 

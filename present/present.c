@@ -342,7 +342,7 @@ present_create_vblank(present_window_priv_ptr window_priv,
     if (!vblank)
         return NULL;
 
-    xorg_list_append(&vblank->window_list, &window_priv->vblank);
+    xorg_list_append(&vblank->window_list, &window_priv->vblank_queue);
     xorg_list_init(&vblank->event_queue);
 
     vblank->screen = screen;

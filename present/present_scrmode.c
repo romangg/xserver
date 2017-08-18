@@ -430,7 +430,7 @@ present_scrmode_check_flip_window (WindowPtr window)
     }
 
     /* Now check any queued vblanks */
-    xorg_list_for_each_entry(vblank, &window_priv->vblank, window_list) {
+    xorg_list_for_each_entry(vblank, &window_priv->vblank_queue, window_list) {
         if (vblank->queued && vblank->flip && !present_scrmode_check_flip(vblank->crtc, window, vblank->pixmap, vblank->sync_flip, NULL, 0, 0)) {
             vblank->flip = FALSE;
             if (vblank->sync_flip)
@@ -545,7 +545,7 @@ present_scrmode_execute(present_vblank_ptr vblank, uint64_t ust, uint64_t crtc_m
         if (vblank->queued) {
             xorg_list_add(&vblank->event_queue, &present_exec_queue);
             xorg_list_append(&vblank->window_list,
-                             &present_get_window_priv(window, TRUE)->vblank);
+                             &present_get_window_priv(window, TRUE)->vblank_queue);
             return;
         }
     }
@@ -643,7 +643,7 @@ present_scrmode_present_pixmap(present_window_priv_ptr window_priv,
      * in the same frame
      */
     if (!update && pixmap) {
-        xorg_list_for_each_entry_safe(vblank, tmp, &window_priv->vblank, window_list) {
+        xorg_list_for_each_entry_safe(vblank, tmp, &window_priv->vblank_queue, window_list) {
 
             if (!vblank->pixmap)
                 continue;

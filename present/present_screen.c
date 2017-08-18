@@ -46,7 +46,7 @@ present_get_window_priv(WindowPtr window, Bool create)
     if (!window_priv)
         return NULL;
     xorg_list_append(&window_priv->screen_list, &screen_priv->windows);
-    xorg_list_init(&window_priv->vblank);
+    xorg_list_init(&window_priv->vblank_queue);
     xorg_list_init(&window_priv->notifies);
 
     xorg_list_init(&window_priv->exec_queue);
@@ -89,7 +89,7 @@ present_clear_window_flip_scrmode(WindowPtr window)
     present_vblank_ptr          flip_pending;
     present_vblank_ptr          vblank, tmp;
 
-    xorg_list_for_each_entry_safe(vblank, tmp, &window_priv->vblank, window_list) {
+    xorg_list_for_each_entry_safe(vblank, tmp, &window_priv->vblank_queue, window_list) {
         screen_priv->abort_vblank(screen, window, vblank->crtc, vblank->event_id, vblank->target_msc);
         present_vblank_destroy(vblank);
     }
@@ -118,7 +118,7 @@ present_clear_window_flip_winmode(WindowPtr window)
     /* Clear up any fake vblanks */
     present_fake_abort_vblank(screen, window, 0, 0);
 
-    /* we don't use the window_priv->vblank list, so clean up here */
+    /* we don't use the window_priv->vblank_queue list, so clean up here */
     xorg_list_for_each_entry_safe(vblank, tmp, &window_priv->exec_queue, event_queue) {
         screen_priv->abort_vblank(screen, window, vblank->crtc, vblank->event_id, vblank->target_msc);
         present_vblank_destroy(vblank);
