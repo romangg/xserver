@@ -100,12 +100,6 @@ present_winmode_flip_idle_vblank(present_vblank_ptr vblank)
 {
     present_pixmap_idle(vblank->pixmap, vblank->window,
                         vblank->serial, vblank->idle_fence);
-
-    //TODOX:
-    /* Don't destroy these objects in the subsequent vblank destruction. */
-    vblank->pixmap = NULL;
-    vblank->idle_fence = NULL;
-
     present_vblank_destroy(vblank);
 }
 
@@ -114,10 +108,11 @@ present_winmode_flip_idle_active(WindowPtr window)
 {
     present_window_priv_ptr window_priv = present_window_priv(window);
 
-    if (window_priv->flip_active) {
-        present_winmode_flip_idle_vblank(window_priv->flip_active);
-        window_priv->flip_active = NULL;
-    }
+    if (!window_priv->flip_active)
+        return;
+
+    present_winmode_flip_idle_vblank(window_priv->flip_active);
+    window_priv->flip_active = NULL;
 }
 /*
  * Free any left over idle vblanks
@@ -572,6 +567,7 @@ present_winmode_present_pixmap(present_window_priv_ptr window_priv,
             if (vblank->target_msc != target_msc)
                 continue;
 
+            //TODOX: remove?
             if (vblank->window != window)
                 continue;
 

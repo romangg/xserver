@@ -267,7 +267,6 @@ present_execute_post(present_vblank_ptr vblank, uint64_t ust, uint64_t crtc_msc)
     else
         mode = PresentCompleteModeCopy;
 
-
     present_vblank_notify(vblank, vblank->kind, mode, ust, crtc_msc);
     present_vblank_destroy(vblank);
 }
@@ -496,7 +495,7 @@ present_vblank_destroy(present_vblank_ptr vblank)
                   vblank->window ? vblank->window->drawable.id : 0));
 
     /* Drop pixmap reference */
-    if (vblank->pixmap)
+    if (vblank->pixmap && vblank->pixmap->refcnt > 1)
         dixDestroyPixmap(vblank->pixmap, vblank->pixmap->drawable.id);
 
     /* Free regions */
