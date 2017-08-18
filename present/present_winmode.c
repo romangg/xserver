@@ -118,11 +118,6 @@ present_winmode_flip_idle_active(WindowPtr window)
         present_winmode_flip_idle_vblank(window_priv->flip_active);
         window_priv->flip_active = NULL;
     }
-    // TODOX:
-//    /* if we lose the active flip, the flipping window could be reparented and the DDX
-//     * delete the crtc
-//     */
-//    window_priv->crtc = NULL;
 }
 /*
  * Free any left over idle vblanks
@@ -205,8 +200,6 @@ present_winmode_unflip(WindowPtr window)
     assert (!window_priv->flip_pending);
 
     present_winmode_restore_window_pixmap(window);
-    //TODOX:
-    present_winmode_free_idle_vblanks(window);
 
     window_priv->unflip_event_id = ++window_priv->event_id;
     DebugPresent(("u %lld\n", window_priv->unflip_event_id));
@@ -284,8 +277,7 @@ present_winmode_event_notify(WindowPtr window, uint64_t event_id, uint64_t ust, 
     if (event_id == window_priv->unflip_event_id) {
         DebugPresent(("\tun %lld\n", event_id));
         window_priv->unflip_event_id = 0;
-        //TODOX:
-        present_winmode_flip_idle_active(window_priv->window);
+        present_winmode_free_idle_vblanks(window_priv->window);
         present_winmode_flip_try_ready(window_priv->window);
     }
 }
