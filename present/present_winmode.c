@@ -395,9 +395,8 @@ present_winmode_execute(present_vblank_ptr vblank, uint64_t ust, uint64_t crtc_m
     present_window_priv_ptr     window_priv = present_window_priv(window);
     present_screen_priv_ptr     screen_priv = present_screen_priv(screen);
 
-    if (!present_execute_wait(vblank, crtc_msc))
+    if (present_execute_wait(vblank, crtc_msc))
         return;
-
 
     if (vblank->flip && vblank->pixmap && vblank->window) {
         if (window_priv->flip_pending || window_priv->unflip_event_id) {

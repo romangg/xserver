@@ -210,16 +210,16 @@ present_execute_wait(present_vblank_ptr vblank, uint64_t crtc_msc)
                                                  vblank->crtc,
                                                  vblank->event_id,
                                                  vblank->target_msc))
-            return FALSE;
+            return TRUE;
     }
 
     if (vblank->wait_fence) {
         if (!present_fence_check_triggered(vblank->wait_fence)) {
             present_fence_set_callback(vblank->wait_fence, present_wait_fence_triggered, vblank);
-            return FALSE;
+            return TRUE;
         }
     }
-    return TRUE;
+    return FALSE;
 }
 
 void

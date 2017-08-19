@@ -455,7 +455,7 @@ present_scrmode_execute(present_vblank_ptr vblank, uint64_t ust, uint64_t crtc_m
     ScreenPtr                   screen = window->drawable.pScreen;
     present_screen_priv_ptr     screen_priv = present_screen_priv(screen);
 
-    if (!present_execute_wait(vblank, crtc_msc))
+    if (present_execute_wait(vblank, crtc_msc))
         return;
 
     if (vblank->flip && vblank->pixmap && vblank->window) {
