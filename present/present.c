@@ -299,7 +299,7 @@ present_adjust_timings(uint32_t options,
 }
 
 void
-present_scrap_obsolete_vblank(present_vblank_ptr vblank)
+present_vblank_scrap(present_vblank_ptr vblank)
 {
     DebugPresent(("\tx %lld %p %8lld: %08lx -> %08lx (crtc %p)\n",
                   vblank->event_id, vblank, vblank->target_msc,

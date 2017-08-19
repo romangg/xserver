@@ -297,7 +297,7 @@ present_create_vblank(present_window_priv_ptr window_priv,
                       uint64_t crtc_msc);
 
 void
-present_scrap_obsolete_vblank(present_vblank_ptr vblank);
+present_vblank_scrap(present_vblank_ptr vblank);
 
 void
 present_adjust_timings(uint32_t options,

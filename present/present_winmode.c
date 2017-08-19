@@ -565,7 +565,7 @@ present_winmode_present_pixmap(present_window_priv_ptr window_priv,
             if (vblank->target_msc != target_msc)
                 continue;
 
-            present_scrap_obsolete_vblank(vblank);
+            present_vblank_scrap(vblank);
             if (vblank->flip_ready)
                 present_winmode_re_execute(vblank);
         }

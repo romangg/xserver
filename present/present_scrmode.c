@@ -657,7 +657,7 @@ present_scrmode_present_pixmap(present_window_priv_ptr window_priv,
             if (vblank->crtc != target_crtc)
                 continue;
 
-            present_scrap_obsolete_vblank(vblank);
+            present_vblank_scrap(vblank);
             if (vblank->flip_ready)
                 present_scrmode_re_execute(vblank);
         }
