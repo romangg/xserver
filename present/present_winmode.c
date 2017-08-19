@@ -217,7 +217,7 @@ present_winmode_flip_notify(present_vblank_ptr vblank, uint64_t ust, uint64_t cr
     xorg_list_del(&vblank->event_queue);
 
     if (window_priv->flip_active)
-        /* Put the flip back in the window_list and wait for further notice from DDX */
+        /* Put the flip in the idle_queue and wait for further notice from DDX */
         xorg_list_append(&window_priv->flip_active->event_queue, &window_priv->idle_queue);
 
     window_priv->flip_active = vblank;
@@ -354,7 +354,7 @@ present_winmode_check_flip_window (WindowPtr window)
     }
 
     /* Now check any queued vblanks */
-    xorg_list_for_each_entry(vblank, &window_priv->flip_queue, event_queue) {
+    xorg_list_for_each_entry(vblank, &window_priv->vblank_queue, window_list) {
         if (vblank->queued && vblank->flip && !present_winmode_check_flip(vblank->crtc, window, vblank->pixmap, vblank->sync_flip, NULL, 0, 0)) {
             vblank->flip = FALSE;
             if (vblank->sync_flip)
@@ -411,6 +411,7 @@ present_winmode_execute(present_vblank_ptr vblank, uint64_t ust, uint64_t crtc_m
     }
 
     xorg_list_del(&vblank->event_queue);
+    xorg_list_del(&vblank->window_list);
     vblank->queued = FALSE;
 
     if (vblank->pixmap && vblank->window) {
@@ -473,6 +474,7 @@ present_winmode_execute(present_vblank_ptr vblank, uint64_t ust, uint64_t crtc_m
 
         if (vblank->queued) {
             xorg_list_add(&vblank->event_queue, &window_priv->exec_queue);
+            xorg_list_append(&vblank->window_list, &window_priv->vblank_queue);
 
             return;
         }
