@@ -170,7 +170,7 @@ present_winmode_restore_window_pixmap(WindowPtr window)
      * 2D applications drawing to the wrong pixmap.
      */
     present_set_tree_pixmap(window, flip_pixmap, window_priv->restore_pixmap);
-    window_priv->restore_pixmap->refcnt--;
+    dixDestroyPixmap(window_priv->restore_pixmap, window_priv->restore_pixmap->drawable.id);
     window_priv->restore_pixmap = NULL;
 }
 
@@ -438,7 +438,8 @@ present_winmode_execute(present_vblank_ptr vblank, uint64_t ust, uint64_t crtc_m
                  */
                 if (!window_priv->restore_pixmap) {
                     window_priv->restore_pixmap = (*screen->GetWindowPixmap)(window);
-                    window_priv->restore_pixmap->refcnt++;
+                    if (window_priv->restore_pixmap)
+                        window_priv->restore_pixmap->refcnt++;
                 }
                 present_set_tree_pixmap(vblank->window, NULL, vblank->pixmap);
 

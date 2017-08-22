@@ -551,7 +551,6 @@ xwl_unrealize_window(WindowPtr window)
     struct xwl_window *xwl_window;
     struct xwl_seat *xwl_seat;
     Bool ret;
-    struct xwl_present_event *event, *tmp;
 
     xwl_screen = xwl_screen_get(screen);
 
