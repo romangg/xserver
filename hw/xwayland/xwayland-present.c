@@ -232,12 +232,6 @@ xwl_present_check_flip(RRCrtcPtr crtc,
                        PixmapPtr pixmap,
                        Bool sync_flip)
 {
-    /* We make sure compositing is active. TODOX: Is this always the case in Xwayland anyway? */
-#ifndef COMPOSITE
-    return FALSE;
-#endif
-    /* we can't take crtc->devPrivate because window might have been reparented and
-     * the former parent xwl_window destroyed */
     struct xwl_window *xwl_window = xwl_window_get(present_window);
 
     if (!xwl_window)
