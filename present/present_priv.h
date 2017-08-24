@@ -123,6 +123,29 @@ typedef struct present_window_priv {
     uint64_t            unflip_event_id;
 } present_window_priv_rec, *present_window_priv_ptr;
 
+/*
+ * Mode hooks
+ */
+typedef void (*present_priv_create_event_id_ptr)(present_window_priv_ptr window_priv, present_vblank_ptr vblank);
+typedef uint32_t (*present_priv_query_capabilities_ptr)(present_screen_priv_ptr screen_priv);
+typedef RRCrtcPtr (*present_priv_get_crtc_ptr)(present_screen_priv_ptr screen_priv, WindowPtr window);
+
+typedef void (*present_priv_re_execute_ptr)(present_vblank_ptr vblank);
+
+typedef Bool (*present_priv_check_flip_ptr)(RRCrtcPtr crtc,
+                                            WindowPtr window,
+                                            PixmapPtr pixmap,
+                                            Bool sync_flip,
+                                            RegionPtr valid,
+                                            int16_t x_off,
+                                            int16_t y_off);
+typedef void (*present_priv_check_flip_window_ptr)(WindowPtr window);
+
+typedef int (*present_priv_queue_vblank_ptr)(ScreenPtr screen,
+                                             WindowPtr window,
+                                             RRCrtcPtr crtc,
+                                             uint64_t event_id,
+                                             uint64_t msc);
 typedef int (*present_priv_pixmap_ptr)(present_window_priv_ptr window,
                                        PixmapPtr pixmap,
                                        CARD32 serial,
@@ -140,29 +163,13 @@ typedef int (*present_priv_pixmap_ptr)(present_window_priv_ptr window,
                                        present_notify_ptr notifies,
                                        int num_notifies);
 
-typedef Bool (*present_priv_check_flip_ptr)(RRCrtcPtr crtc,
-                                            WindowPtr window,
-                                            PixmapPtr pixmap,
-                                            Bool sync_flip,
-                                            RegionPtr valid,
-                                            int16_t x_off,
-                                            int16_t y_off);
-typedef void (*present_priv_check_flip_window_ptr)(WindowPtr window);
-typedef void (*present_priv_flips_destroy_ptr)(ScreenPtr screen);
-typedef void (*present_priv_create_event_id_ptr)(present_window_priv_ptr window_priv, present_vblank_ptr vblank);
-typedef void (*present_priv_re_execute_ptr)(present_vblank_ptr vblank);
-typedef int (*present_priv_queue_vblank_ptr)(ScreenPtr screen,
-                                             WindowPtr window,
-                                             RRCrtcPtr crtc,
-                                             uint64_t event_id,
-                                             uint64_t msc);
-typedef RRCrtcPtr (*present_priv_get_crtc_ptr)(present_screen_priv_ptr screen_priv, WindowPtr window);
-typedef uint32_t (*present_priv_query_capabilities_ptr)(present_screen_priv_ptr screen_priv);
 typedef void (*present_priv_abort_vblank_ptr)(ScreenPtr screen,
                                               WindowPtr window,
                                               RRCrtcPtr crtc,
                                               uint64_t event_id,
                                               uint64_t msc);
+typedef void (*present_priv_flips_destroy_ptr)(ScreenPtr screen);
+
 typedef void (*present_priv_flush_ptr)(WindowPtr window);
 
 struct present_screen_priv {
@@ -189,17 +196,17 @@ struct present_screen_priv {
     present_screen_info_ptr         info;
     present_winmode_screen_info_ptr winmode_info;
 
-    /* internal fct pointer */
-    present_priv_check_flip_window_ptr  check_flip_window;
+    /* Mode hooks */
     present_priv_create_event_id_ptr    create_event_id;
-    present_priv_pixmap_ptr             present_pixmap;
-    present_priv_flips_destroy_ptr      flips_destroy;
-    present_priv_re_execute_ptr         re_execute;
-    present_priv_queue_vblank_ptr       queue_vblank;
-    present_priv_get_crtc_ptr           get_crtc;
     present_priv_query_capabilities_ptr query_capabilities;
+    present_priv_get_crtc_ptr           get_crtc;
+    present_priv_re_execute_ptr         re_execute;
     present_priv_check_flip_ptr         check_flip;
+    present_priv_check_flip_window_ptr  check_flip_window;
+    present_priv_queue_vblank_ptr       queue_vblank;
+    present_priv_pixmap_ptr             present_pixmap;
     present_priv_abort_vblank_ptr       abort_vblank;
+    present_priv_flips_destroy_ptr      flips_destroy;
     present_priv_flush_ptr              flush;
 };
 

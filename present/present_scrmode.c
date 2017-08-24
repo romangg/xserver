@@ -33,6 +33,33 @@ static struct xorg_list present_flip_queue;
 static void
 present_scrmode_execute(present_vblank_ptr vblank, uint64_t ust, uint64_t crtc_msc);
 
+static void
+present_scrmode_create_event_id(present_window_priv_ptr window_priv, present_vblank_ptr vblank)
+{
+    vblank->event_id = ++present_event_id;
+}
+
+static uint32_t
+present_scrmode_query_capabilities(present_screen_priv_ptr screen_priv)
+{
+    if (!screen_priv->info)
+        return 0;
+
+    return screen_priv->info->capabilities;
+}
+
+static RRCrtcPtr
+present_scrmode_get_crtc(present_screen_priv_ptr screen_priv, WindowPtr window)
+{
+    if (!screen_priv)
+        return NULL;
+
+    if (!screen_priv->info)
+        return NULL;
+
+    return (*screen_priv->info->get_crtc)(window);
+}
+
 static inline PixmapPtr
 present_scrmode_flip_pending_pixmap(ScreenPtr screen)
 {
@@ -58,133 +85,6 @@ present_scrmode_flip(RRCrtcPtr  crtc,
     present_screen_priv_ptr     screen_priv = present_screen_priv(screen);
 
     return (*screen_priv->info->flip) (crtc, event_id, target_msc, pixmap, sync_flip);
-}
-
-static Bool
-present_scrmode_check_flip(RRCrtcPtr    crtc,
-                           WindowPtr    window,
-                           PixmapPtr    pixmap,
-                           Bool         sync_flip,
-                           RegionPtr    valid,
-                           int16_t      x_off,
-                           int16_t      y_off)
-{
-    ScreenPtr                   screen = window->drawable.pScreen;
-    PixmapPtr                   window_pixmap;
-    WindowPtr                   root = screen->root;
-    present_screen_priv_ptr     screen_priv = present_screen_priv(screen);
-
-    if (!screen_priv)
-        return FALSE;
-
-    if (!screen_priv->info)
-        return FALSE;
-
-    if (!crtc)
-        return FALSE;
-
-    /* Check to see if the driver supports flips at all */
-    if (!screen_priv->info->flip)
-        return FALSE;
-
-    /* Source pixmap must align with window exactly */
-    if (x_off || y_off) {
-        return FALSE;
-    }
-
-    /* Make sure the window hasn't been redirected with Composite */
-    window_pixmap = screen->GetWindowPixmap(window);
-    if (window_pixmap != screen->GetScreenPixmap(screen) &&
-        window_pixmap != screen_priv->flip_pixmap &&
-        window_pixmap != present_scrmode_flip_pending_pixmap(screen))
-        return FALSE;
-
-    /* Check for full-screen window */
-    if (!RegionEqual(&window->clipList, &root->winSize)) {
-        return FALSE;
-    }
-
-    /* Make sure the area marked as valid fills the screen */
-    if (valid && !RegionEqual(valid, &root->winSize)) {
-        return FALSE;
-    }
-
-    /* Does the window match the pixmap exactly? */
-    if (window->drawable.x != 0 || window->drawable.y != 0)
-        return FALSE;
-    #ifdef COMPOSITE
-    if (window->drawable.x != pixmap->screen_x || window->drawable.y != pixmap->screen_y)
-        return FALSE;
-    #endif
-
-    if (window->drawable.width != pixmap->drawable.width ||
-            window->drawable.height != pixmap->drawable.height)
-        return FALSE;
-
-    /* Ask the driver for permission */
-    if (screen_priv->info->check_flip) {
-        if (!(*screen_priv->info->check_flip) (crtc, window, pixmap, sync_flip)) {
-            DebugPresent(("\td %08lx -> %08lx\n", window->drawable.id, pixmap ? pixmap->drawable.id : 0));
-            return FALSE;
-        }
-    }
-
-    return TRUE;
-}
-
-static void
-present_scrmode_flush(WindowPtr window)
-{
-    ScreenPtr                   screen = window->drawable.pScreen;
-    present_screen_priv_ptr     screen_priv = present_screen_priv(screen);
-
-    if (!screen_priv)
-        return;
-
-    if (!screen_priv->info)
-        return;
-
-    (*screen_priv->info->flush) (window);
-}
-
-static RRCrtcPtr
-present_scrmode_get_crtc(present_screen_priv_ptr screen_priv, WindowPtr window)
-{
-    if (!screen_priv)
-        return NULL;
-
-    if (!screen_priv->info)
-        return NULL;
-
-    return (*screen_priv->info->get_crtc)(window);
-}
-
-static uint32_t
-present_scrmode_query_capabilities(present_screen_priv_ptr screen_priv)
-{
-    if (!screen_priv->info)
-        return 0;
-
-    return screen_priv->info->capabilities;
-}
-
-static int
-present_scrmode_queue_vblank(ScreenPtr screen,
-                             WindowPtr window,
-                             RRCrtcPtr crtc,
-                             uint64_t event_id,
-                             uint64_t msc)
-{
-    Bool ret;
-
-    if (crtc == NULL)
-        ret = present_fake_queue_vblank(screen, NULL, event_id, msc);
-    else
-    {
-        present_screen_priv_ptr     screen_priv = present_screen_priv(screen);
-        ret = (*screen_priv->info->queue_vblank) (crtc, event_id, msc);
-    }
-    return ret;
 }
 
 static int
@@ -386,6 +286,78 @@ present_event_notify(uint64_t event_id, uint64_t ust, uint64_t msc)
     }
 }
 
+static Bool
+present_scrmode_check_flip(RRCrtcPtr    crtc,
+                           WindowPtr    window,
+                           PixmapPtr    pixmap,
+                           Bool         sync_flip,
+                           RegionPtr    valid,
+                           int16_t      x_off,
+                           int16_t      y_off)
+{
+    ScreenPtr                   screen = window->drawable.pScreen;
+    PixmapPtr                   window_pixmap;
+    WindowPtr                   root = screen->root;
+    present_screen_priv_ptr     screen_priv = present_screen_priv(screen);
+
+    if (!screen_priv)
+        return FALSE;
+
+    if (!screen_priv->info)
+        return FALSE;
+
+    if (!crtc)
+        return FALSE;
+
+    /* Check to see if the driver supports flips at all */
+    if (!screen_priv->info->flip)
+        return FALSE;
+
+    /* Source pixmap must align with window exactly */
+    if (x_off || y_off) {
+        return FALSE;
+    }
+
+    /* Make sure the window hasn't been redirected with Composite */
+    window_pixmap = screen->GetWindowPixmap(window);
+    if (window_pixmap != screen->GetScreenPixmap(screen) &&
+        window_pixmap != screen_priv->flip_pixmap &&
+        window_pixmap != present_scrmode_flip_pending_pixmap(screen))
+        return FALSE;
+
+    /* Check for full-screen window */
+    if (!RegionEqual(&window->clipList, &root->winSize)) {
+        return FALSE;
+    }
+
+    /* Make sure the area marked as valid fills the screen */
+    if (valid && !RegionEqual(valid, &root->winSize)) {
+        return FALSE;
+    }
+
+    /* Does the window match the pixmap exactly? */
+    if (window->drawable.x != 0 || window->drawable.y != 0)
+        return FALSE;
+    #ifdef COMPOSITE
+    if (window->drawable.x != pixmap->screen_x || window->drawable.y != pixmap->screen_y)
+        return FALSE;
+    #endif
+
+    if (window->drawable.width != pixmap->drawable.width ||
+            window->drawable.height != pixmap->drawable.height)
+        return FALSE;
+
+    /* Ask the driver for permission */
+    if (screen_priv->info->check_flip) {
+        if (!(*screen_priv->info->check_flip) (crtc, window, pixmap, sync_flip)) {
+            DebugPresent(("\td %08lx -> %08lx\n", window->drawable.id, pixmap ? pixmap->drawable.id : 0));
+            return FALSE;
+        }
+    }
+
+    return TRUE;
+}
+
 /*
  * 'window' is being reconfigured. Check to see if it is involved
  * in flipping and clean up as necessary
@@ -553,10 +525,23 @@ present_scrmode_execute(present_vblank_ptr vblank, uint64_t ust, uint64_t crtc_m
     present_execute_post(vblank, ust, crtc_msc);
 }
 
-static void
-present_scrmode_create_event_id(present_window_priv_ptr window_priv, present_vblank_ptr vblank)
+static int
+present_scrmode_queue_vblank(ScreenPtr screen,
+                             WindowPtr window,
+                             RRCrtcPtr crtc,
+                             uint64_t event_id,
+                             uint64_t msc)
 {
-    vblank->event_id = ++present_event_id;
+    Bool ret;
+
+    if (crtc == NULL)
+        ret = present_fake_queue_vblank(screen, NULL, event_id, msc);
+    else
+    {
+        present_screen_priv_ptr     screen_priv = present_screen_priv(screen);
+        ret = (*screen_priv->info->queue_vblank) (crtc, event_id, msc);
+    }
+    return ret;
 }
 
 static uint64_t
@@ -698,19 +683,6 @@ present_scrmode_present_pixmap(present_window_priv_ptr window_priv,
 }
 
 static void
-present_scrmode_flip_destroy(ScreenPtr screen)
-{
-    present_screen_priv_ptr     screen_priv = present_screen_priv(screen);
-
-    /* Reset window pixmaps back to the screen pixmap */
-    if (screen_priv->flip_pending)
-        present_scrmode_set_abort_flip(screen);
-
-    /* Drop reference to any pending flip or unflip pixmaps. */
-    present_scrmode_flip_idle(screen);
-}
-
-static void
 present_scrmode_abort_vblank(ScreenPtr screen, WindowPtr window, RRCrtcPtr crtc, uint64_t event_id, uint64_t msc)
 {
     present_vblank_ptr  vblank;
@@ -743,19 +715,47 @@ present_scrmode_abort_vblank(ScreenPtr screen, WindowPtr window, RRCrtcPtr crtc,
     }
 }
 
+static void
+present_scrmode_flip_destroy(ScreenPtr screen)
+{
+    present_screen_priv_ptr     screen_priv = present_screen_priv(screen);
+
+    /* Reset window pixmaps back to the screen pixmap */
+    if (screen_priv->flip_pending)
+        present_scrmode_set_abort_flip(screen);
+
+    /* Drop reference to any pending flip or unflip pixmaps. */
+    present_scrmode_flip_idle(screen);
+}
+
+static void
+present_scrmode_flush(WindowPtr window)
+{
+    ScreenPtr                   screen = window->drawable.pScreen;
+    present_screen_priv_ptr     screen_priv = present_screen_priv(screen);
+
+    if (!screen_priv)
+        return;
+
+    if (!screen_priv->info)
+        return;
+
+    (*screen_priv->info->flush) (window);
+}
+
 void
 present_scrmode_init_scrmode(present_screen_priv_ptr screen_priv)
 {
-    screen_priv->check_flip_window  =   &present_scrmode_check_flip_window;
     screen_priv->create_event_id    =   &present_scrmode_create_event_id;
-    screen_priv->present_pixmap     =   &present_scrmode_present_pixmap;
-    screen_priv->flips_destroy      =   &present_scrmode_flip_destroy;
-    screen_priv->re_execute         =   &present_scrmode_re_execute;
-    screen_priv->queue_vblank       =   &present_scrmode_queue_vblank;
-    screen_priv->get_crtc           =   &present_scrmode_get_crtc;
     screen_priv->query_capabilities =   &present_scrmode_query_capabilities;
+    screen_priv->get_crtc           =   &present_scrmode_get_crtc;
+    screen_priv->re_execute         =   &present_scrmode_re_execute;
     screen_priv->check_flip         =   &present_scrmode_check_flip;
+    screen_priv->check_flip_window  =   &present_scrmode_check_flip_window;
+    screen_priv->queue_vblank       =   &present_scrmode_queue_vblank;
+    screen_priv->present_pixmap     =   &present_scrmode_present_pixmap;
     screen_priv->abort_vblank       =   &present_scrmode_abort_vblank;
+    screen_priv->flips_destroy      =   &present_scrmode_flip_destroy;
     screen_priv->flush              =   &present_scrmode_flush;
 }
 
