@@ -67,7 +67,7 @@ present_winmode_re_execute(present_vblank_ptr vblank)
 {
     uint64_t            ust = 0, crtc_msc = 0;
 
-    (void) present_winmode_get_ust_msc(vblank->screen, vblank->window, &ust, &crtc_msc);  //TODOX: guard against vblank->window == NULL?
+    (void) present_winmode_get_ust_msc(vblank->screen, vblank->window, &ust, &crtc_msc);
 
     present_winmode_execute(vblank, ust, crtc_msc);
 }
@@ -505,7 +505,7 @@ present_winmode_window_to_crtc_msc(WindowPtr window, RRCrtcPtr crtc, uint64_t wi
              * we'll just use whatever previous MSC we'd seen from this CRTC
              */
 
-            if (present_winmode_get_ust_msc(window->drawable.pScreen, window, &old_ust, &old_msc) != Success)   // TODOX: why here again?
+            if (present_winmode_get_ust_msc(window->drawable.pScreen, window, &old_ust, &old_msc) != Success)
                 old_msc = window_priv->msc;
 
             window_priv->msc_offset += new_msc - old_msc;

@@ -343,10 +343,10 @@ present_copy_region(DrawablePtr drawable,
  * present_scrmode.c
  */
 void
-present_scrmode_restore_screen_pixmap(ScreenPtr screen);  // TODOX: as fct ptr in screen_priv instead?
+present_scrmode_set_abort_flip(ScreenPtr screen);
 
 void
-present_scrmode_set_abort_flip(ScreenPtr screen);
+present_scrmode_restore_screen_pixmap(ScreenPtr screen);
 
 void
 present_scrmode_init_scrmode(present_screen_priv_ptr screen_priv);
