@@ -6,8 +6,6 @@ AM_CFLAGS = \
 libpresent_la_SOURCES = \
 	present.h \
 	present.c \
-	present_scrmode.c \
-        present_winmode.c \
 	present_event.c \
 	present_execute.c \
 	present_fake.c \
@@ -16,6 +14,8 @@ libpresent_la_SOURCES = \
 	present_priv.h \
 	present_request.c \
         present_screen.c \
-        present_vblank.c
+	present_scrmode.c \
+        present_vblank.c \
+        present_winmode.c
 
 sdk_HEADERS = present.h presentext.h
