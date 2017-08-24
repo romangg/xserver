@@ -298,25 +298,8 @@ present_adjust_timings(uint32_t options,
     }
 }
 
-void
-present_vblank_scrap(present_vblank_ptr vblank)
-{
-    DebugPresent(("\tx %lld %p %8lld: %08lx -> %08lx (crtc %p)\n",
-                  vblank->event_id, vblank, vblank->target_msc,
-                  vblank->pixmap->drawable.id, vblank->window->drawable.id,
-                  vblank->crtc));
-
-    present_pixmap_idle(vblank->pixmap, vblank->window, vblank->serial, vblank->idle_fence);
-    present_fence_destroy(vblank->idle_fence);
-    dixDestroyPixmap(vblank->pixmap, vblank->pixmap->drawable.id);
-
-    vblank->pixmap = NULL;
-    vblank->idle_fence = NULL;
-    vblank->flip = FALSE;
-}
-
 present_vblank_ptr
-present_create_vblank(present_window_priv_ptr window_priv,
+present_vblank_create(present_window_priv_ptr window_priv,
                       PixmapPtr pixmap,
                       CARD32 serial,
                       RegionPtr valid,
@@ -479,6 +462,23 @@ present_notify_msc(WindowPtr window,
                           NULL, NULL,
                           divisor == 0 ? PresentOptionAsync : 0,
                           target_msc, divisor, remainder, NULL, 0);
+}
+
+void
+present_vblank_scrap(present_vblank_ptr vblank)
+{
+    DebugPresent(("\tx %lld %p %8lld: %08lx -> %08lx (crtc %p)\n",
+                  vblank->event_id, vblank, vblank->target_msc,
+                  vblank->pixmap->drawable.id, vblank->window->drawable.id,
+                  vblank->crtc));
+
+    present_pixmap_idle(vblank->pixmap, vblank->window, vblank->serial, vblank->idle_fence);
+    present_fence_destroy(vblank->idle_fence);
+    dixDestroyPixmap(vblank->pixmap, vblank->pixmap->drawable.id);
+
+    vblank->pixmap = NULL;
+    vblank->idle_fence = NULL;
+    vblank->flip = FALSE;
 }
 
 void

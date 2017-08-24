@@ -279,7 +279,7 @@ Bool
 present_init(void);
 
 present_vblank_ptr
-present_create_vblank(present_window_priv_ptr window_priv,
+present_vblank_create(present_window_priv_ptr window_priv,
                       PixmapPtr pixmap,
                       CARD32 serial,
                       RegionPtr valid,

@@ -663,7 +663,7 @@ present_scrmode_present_pixmap(present_window_priv_ptr window_priv,
         }
     }
 
-    vblank = present_create_vblank(window_priv,
+    vblank = present_vblank_create(window_priv,
                                    pixmap,
                                    serial,
                                    valid,
