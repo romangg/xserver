@@ -237,18 +237,12 @@ xwl_present_check_flip(RRCrtcPtr crtc,
     if (!xwl_window)
         return FALSE;
 
-    // TODOX: remove the crtc checks?
     if (!xwl_window->present_crtc_fake)
         return FALSE;
     /* Make sure the client doesn't try to flip to another crtc
      * than the one created for 'xwl_window'
      */
     if (xwl_window->present_crtc_fake != crtc)
-        return FALSE;
-
-    // TODOX: remove this check? does it make sense at all?
-    /* In order to reduce complexity, we currently allow only one subsurface, i.e. one completely visible region. */
-    if (RegionNumRects(&present_window->clipList) > 1)
         return FALSE;
 
     /* We always switch to another child window, if it wants to present. */
@@ -304,18 +298,19 @@ xwl_present_flip(WindowPtr present_window,
             input_region = wl_compositor_create_region(xwl_screen->compositor);
             wl_surface_set_input_region(xwl_window->present_surface, input_region);
             wl_region_destroy(input_region);
-
-            wl_subsurface_set_position(xwl_window->present_subsurface,  //TODOX: do this every frame in case the child window is moved inside the parent window?
-                                       present_box->x1 - win_box->x1,
-                                       present_box->y1 - win_box->y1);
         }
     }
 
     event = malloc(sizeof *event);
     if (!event) {
-        // TODOX: rewind everything above (or just do flip without buffer release callback?)
+        xwl_present_cleanup(present_window);
         return FALSE;
     }
+
+    if (xwl_window->present_subsurface)
+        wl_subsurface_set_position(xwl_window->present_subsurface,
+                                   present_box->x1 - win_box->x1,
+                                   present_box->y1 - win_box->y1);
 
     buffer = xwl_glamor_pixmap_get_wl_buffer(pixmap,
                                              present_box->x2 - present_box->x1,
