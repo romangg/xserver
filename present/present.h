@@ -116,7 +116,7 @@ typedef void (*present_unflip_ptr) (ScreenPtr screen,
  * present_event_notify should be called with 'event_id' when the unflip occurs.
  */
 typedef void (*present_unflip_winmode_ptr) (WindowPtr window,
-                                    uint64_t event_id);
+                                            uint64_t event_id);
 
 #define PRESENT_SCREEN_INFO_VERSION         0
 

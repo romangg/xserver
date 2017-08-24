@@ -99,54 +99,54 @@ typedef struct present_event {
 } present_event_rec;
 
 typedef struct present_window_priv {
-    WindowPtr               window;
-    struct xorg_list        screen_list;
+    WindowPtr           window;
+    struct xorg_list    screen_list;
 
-    present_event_ptr      events;
-    RRCrtcPtr              crtc;        /* Last reported CRTC from get_ust_msc */
-    uint64_t               msc_offset;
-    uint64_t               msc;         /* Last reported MSC from the current crtc */
-    struct xorg_list       vblank_queue;
-    struct xorg_list       notifies;
+    present_event_ptr   events;
+    RRCrtcPtr           crtc;        /* Last reported CRTC from get_ust_msc */
+    uint64_t            msc_offset;
+    uint64_t            msc;         /* Last reported MSC from the current crtc */
+    struct xorg_list    vblank_queue;
+    struct xorg_list    notifies;
 
     /* Below for window mode */
-    uint64_t         event_id;
-    struct xorg_list exec_queue;
-    struct xorg_list flip_queue;
-    struct xorg_list idle_queue;
+    uint64_t            event_id;
+    struct xorg_list    exec_queue;
+    struct xorg_list    flip_queue;
+    struct xorg_list    idle_queue;
 
-    struct xorg_list fake_vblank_queue;
+    struct xorg_list    fake_vblank_queue;
 
-    PixmapPtr               restore_pixmap;
-    present_vblank_ptr      flip_pending;
-    present_vblank_ptr      flip_active;
-    uint64_t                unflip_event_id;
+    PixmapPtr           restore_pixmap;
+    present_vblank_ptr  flip_pending;
+    present_vblank_ptr  flip_active;
+    uint64_t            unflip_event_id;
 } present_window_priv_rec, *present_window_priv_ptr;
 
-typedef int (*present_priv_pixmap_ptr) (present_window_priv_ptr window,
-                                   PixmapPtr pixmap,
-                                   CARD32 serial,
-                                   RegionPtr valid,
-                                   RegionPtr update,
-                                   int16_t x_off,
-                                   int16_t y_off,
-                                   RRCrtcPtr target_crtc,
-                                   SyncFence *wait_fence,
-                                   SyncFence *idle_fence,
-                                   uint32_t options,
-                                   uint64_t window_msc,
-                                   uint64_t divisor,
-                                   uint64_t remainder,
-                                   present_notify_ptr notifies,
-                                   int num_notifies);
+typedef int (*present_priv_pixmap_ptr)(present_window_priv_ptr window,
+                                       PixmapPtr pixmap,
+                                       CARD32 serial,
+                                       RegionPtr valid,
+                                       RegionPtr update,
+                                       int16_t x_off,
+                                       int16_t y_off,
+                                       RRCrtcPtr target_crtc,
+                                       SyncFence *wait_fence,
+                                       SyncFence *idle_fence,
+                                       uint32_t options,
+                                       uint64_t window_msc,
+                                       uint64_t divisor,
+                                       uint64_t remainder,
+                                       present_notify_ptr notifies,
+                                       int num_notifies);
 
 typedef Bool (*present_priv_check_flip_ptr)(RRCrtcPtr crtc,
-                                                   WindowPtr window,
-                                                   PixmapPtr pixmap,
-                                                   Bool sync_flip,
-                                                   RegionPtr valid,
-                                                   int16_t x_off,
-                                                   int16_t y_off);
+                                            WindowPtr window,
+                                            PixmapPtr pixmap,
+                                            Bool sync_flip,
+                                            RegionPtr valid,
+                                            int16_t x_off,
+                                            int16_t y_off);
 typedef void (*present_priv_check_flip_window_ptr)(WindowPtr window);
 typedef void (*present_priv_flips_destroy_ptr)(ScreenPtr screen);
 typedef void (*present_priv_create_event_id_ptr)(present_window_priv_ptr window_priv, present_vblank_ptr vblank);
@@ -186,9 +186,8 @@ struct present_screen_priv {
     present_fence_ptr           flip_idle_fence;
     Bool                        flip_sync;
 
-    present_screen_info_ptr             info;
-    present_winmode_screen_info_ptr    winmode_info;
-
+    present_screen_info_ptr         info;
+    present_winmode_screen_info_ptr winmode_info;
 
     /* internal fct pointer */
     present_priv_check_flip_window_ptr  check_flip_window;
@@ -244,21 +243,21 @@ msc_is_after(uint64_t test, uint64_t reference)
  */
 int
 present_pixmap(WindowPtr window,
-                   PixmapPtr pixmap,
-                   CARD32 serial,
-                   RegionPtr valid,
-                   RegionPtr update,
-                   int16_t x_off,
-                   int16_t y_off,
-                   RRCrtcPtr target_crtc,
-                   SyncFence *wait_fence,
-                   SyncFence *idle_fence,
-                   uint32_t options,
-                   uint64_t target_msc,
-                   uint64_t divisor,
-                   uint64_t remainder,
-                   present_notify_ptr notifies,
-                   int num_notifies);
+               PixmapPtr pixmap,
+               CARD32 serial,
+               RegionPtr valid,
+               RegionPtr update,
+               int16_t x_off,
+               int16_t y_off,
+               RRCrtcPtr target_crtc,
+               SyncFence *wait_fence,
+               SyncFence *idle_fence,
+               uint32_t options,
+               uint64_t target_msc,
+               uint64_t divisor,
+               uint64_t remainder,
+               present_notify_ptr notifies,
+               int num_notifies);
 
 int
 present_notify_msc(WindowPtr window,
