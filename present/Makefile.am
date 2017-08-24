@@ -14,6 +14,7 @@ libpresent_la_SOURCES = \
 	present_notify.c \
 	present_priv.h \
 	present_request.c \
-	present_screen.c
+        present_screen.c \
+        present_vblank.c
 
 sdk_HEADERS = present.h presentext.h

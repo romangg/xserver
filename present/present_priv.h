@@ -232,6 +232,13 @@ present_window_priv(WindowPtr window)
 present_window_priv_ptr
 present_get_window_priv(WindowPtr window, Bool create);
 
+/* Returns TRUE if 'test' is after 'reference', FALSE otherwise */
+static inline Bool
+msc_is_after(uint64_t test, uint64_t reference)
+{
+    return (int64_t)(test - reference) > 0;
+}
+
 /*
  * present.c
  */
