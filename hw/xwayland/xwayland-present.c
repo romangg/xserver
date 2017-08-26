@@ -53,17 +53,25 @@ xwl_present_cleanup(WindowPtr window)
      * And therefore need to cleanup.
      */
 
+    /* Clear frame callback */
     if (xwl_window->present_frame_callback) {
         wl_callback_destroy(xwl_window->present_frame_callback);
         xwl_window->present_frame_callback = NULL;
     }
 
+    /* Clear surfaces */
+    if (xwl_window->present_subsurface) {
+        wl_subsurface_destroy(xwl_window->present_subsurface);
+        wl_surface_destroy(xwl_window->present_surface);
+        xwl_window->present_subsurface = NULL;
+    }
+    xwl_window->present_surface = NULL;
+
     /* Reset base data */
     xorg_list_del(&xwl_window->present_link);
-    xwl_window->present_surface = NULL;
     xwl_window->present_window = NULL;
 
-    /* Clear remaining events */
+    /* Clear remaining queued events */
     xorg_list_for_each_entry_safe(event, tmp, &xwl_window->present_event_list, list) {
         xorg_list_del(&event->list);
         free(event);
@@ -231,7 +239,9 @@ xwl_present_check_flip(RRCrtcPtr crtc,
      */
     if (xwl_window->present_crtc_fake != crtc)
         return FALSE;
-    if (!RegionEqual(&xwl_window->window->winSize, &present_window->winSize))
+
+    if (!RegionEqual(&xwl_window->window->winSize, &present_window->winSize) &&
+            !xwl_window->xwl_screen->subcompositor)
         return FALSE;
 
     return TRUE;
@@ -246,11 +256,15 @@ xwl_present_flip(WindowPtr present_window,
                  Bool sync_flip)
 {
     struct xwl_window           *xwl_window = xwl_window_from_window(present_window);
-    BoxPtr                      present_box;
+    WindowPtr                   window = xwl_window->window;
+    struct xwl_screen           *xwl_screen = xwl_window->xwl_screen;
+    BoxPtr                      win_box, present_box;
     Bool                        buffer_created;
     struct wl_buffer            *buffer;
     struct xwl_present_event    *event;
+    struct wl_region            *input_region;
 
+    win_box = RegionExtents(&window->winSize);
     present_box = RegionExtents(&present_window->winSize);
 
     /* We always switch to another child window, if it wants to present. */
@@ -260,8 +274,21 @@ xwl_present_flip(WindowPtr present_window,
         xwl_window->present_window = present_window;
         xorg_list_add(&xwl_window->present_link, &xwl_present_windows);
 
-        /* We can flip directly to the main surface (full screen window without clips) */
-        xwl_window->present_surface = xwl_window->surface;
+        if (RegionEqual(&window->winSize, &present_window->winSize)) {
+            /* We can flip directly to the main surface (full screen window without clips) */
+            xwl_window->present_surface = xwl_window->surface;
+        } else {
+            xwl_window->present_surface =  wl_compositor_create_surface(xwl_window->xwl_screen->compositor);
+            wl_surface_set_user_data(xwl_window->present_surface, xwl_window);
+
+            xwl_window->present_subsurface =
+                    wl_subcompositor_get_subsurface(xwl_screen->subcompositor, xwl_window->present_surface, xwl_window->surface);
+            wl_subsurface_set_desync(xwl_window->present_subsurface);
+
+            input_region = wl_compositor_create_region(xwl_screen->compositor);
+            wl_surface_set_input_region(xwl_window->present_surface, input_region);
+            wl_region_destroy(input_region);
+        }
     }
 
     event = malloc(sizeof *event);
@@ -269,6 +296,11 @@ xwl_present_flip(WindowPtr present_window,
         xwl_present_cleanup(present_window);
         return FALSE;
     }
+
+    if (xwl_window->present_subsurface)
+        wl_subsurface_set_position(xwl_window->present_subsurface,
+                                   present_box->x1 - win_box->x1,
+                                   present_box->y1 - win_box->y1);
 
     buffer = xwl_glamor_pixmap_get_wl_buffer(pixmap,
                                              present_box->x2 - present_box->x1,

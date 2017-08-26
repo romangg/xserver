@@ -123,7 +123,6 @@ present_winmode_restore_window_pixmap(WindowPtr window)
 
     flip_pixmap = window_priv->flip_pending ? window_priv->flip_pending->pixmap :
                                               window_priv->flip_active->pixmap;
-
     assert (flip_pixmap);
 
     restore_pixmap = screen->GetWindowPixmap(window->parent);
@@ -419,11 +418,10 @@ present_winmode_execute(present_vblank_ptr vblank, uint64_t ust, uint64_t crtc_m
                     RegionIntersect(damage, damage, &window->clipList);
                 } else
                     damage = &window->clipList;
-
                 DamageDamageRegion(&vblank->window->drawable, damage);
+
                 if (*screen_priv->winmode_info->flip_executed)
                     (*screen_priv->winmode_info->flip_executed) (vblank->window, vblank->crtc, vblank->event_id, damage);
-
 
                 return;
             }
