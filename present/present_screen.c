@@ -46,6 +46,10 @@ present_get_window_priv(WindowPtr window, Bool create)
     xorg_list_init(&window_priv->vblank_queue);
     xorg_list_init(&window_priv->notifies);
 
+    xorg_list_init(&window_priv->exec_queue);
+    xorg_list_init(&window_priv->flip_queue);
+    xorg_list_init(&window_priv->idle_queue);
+
     window_priv->window = window;
     window_priv->crtc = PresentCrtcNeverSet;
     dixSetPrivate(&window->devPrivates, &present_window_private_key, window_priv);
@@ -86,7 +90,7 @@ present_free_window_vblank(WindowPtr window)
 }
 
 static void
-present_clear_window_flip(WindowPtr window)
+present_scrmode_clear_window_flip(WindowPtr window)
 {
     ScreenPtr                   screen = window->drawable.pScreen;
     present_screen_priv_ptr     screen_priv = present_screen_priv(screen);
@@ -100,6 +104,35 @@ present_clear_window_flip(WindowPtr window)
         present_scrmode_restore_screen_pixmap(screen);
         screen_priv->flip_window = NULL;
     }
+}
+
+static void
+present_winmode_clear_window_flip(WindowPtr window)
+{
+    present_window_priv_ptr     window_priv = present_window_priv(window);
+    present_vblank_ptr          vblank, tmp;
+
+    if (window_priv->restore_pixmap)
+        present_winmode_restore_window_pixmap(window);
+
+    if (window_priv->flip_pending) {
+        present_winmode_set_abort_flip(window);
+        window_priv->flip_pending->window = NULL;
+    }
+
+    xorg_list_for_each_entry_safe(vblank, tmp, &window_priv->idle_queue, event_queue) {
+        present_pixmap_idle(vblank->pixmap, vblank->window, vblank->serial, vblank->idle_fence);
+        /* The pixmap will be destroyed by freeing the window resources. */
+        vblank->pixmap = NULL;
+        present_vblank_destroy(vblank);
+    }
+
+    vblank = window_priv->flip_active;
+    if (vblank) {
+        present_pixmap_idle(vblank->pixmap, vblank->window, vblank->serial, vblank->idle_fence);
+        present_vblank_destroy(vblank);
+    }
+    window_priv->flip_active = NULL;
 }
 
 /*
@@ -117,7 +150,12 @@ present_destroy_window(WindowPtr window)
         present_clear_window_notifies(window);
         present_free_events(window);
         present_free_window_vblank(window);
-        present_clear_window_flip(window);
+
+        if (screen_priv->winmode_info)
+            present_winmode_clear_window_flip(window);
+        else
+            present_scrmode_clear_window_flip(window);
+
         free(window_priv);
     }
     unwrap(screen_priv, screen, DestroyWindow);
@@ -218,6 +256,27 @@ present_screen_init(ScreenPtr screen, present_screen_info_ptr info)
         present_scrmode_init_scrmode(screen_priv);
 
         present_fake_screen_init(screen);
+    }
+
+    return TRUE;
+}
+
+/*
+ * Initialize a screen for use with present in window mode
+ */
+int
+present_winmode_screen_init(ScreenPtr screen, present_winmode_screen_info_ptr info)
+{
+    if (!present_screen_register_priv_keys())
+        return FALSE;
+
+    if (!present_screen_priv(screen)) {
+        present_screen_priv_ptr screen_priv = present_screen_priv_init(screen);
+        if (!screen_priv)
+            return FALSE;
+
+        screen_priv->winmode_info = info;
+        present_winmode_init_winmode(screen_priv);
     }
 
     return TRUE;

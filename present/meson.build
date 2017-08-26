@@ -9,6 +9,7 @@ srcs_present = [
     'present_screen.c',
     'present_scrmode.c',
     'present_vblank.c',
+    'present_winmode.c',
 ]
 
 libxserver_present = static_library('libxserver_present',
