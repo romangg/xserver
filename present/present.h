@@ -98,6 +98,12 @@ typedef Bool (*present_winmode_flip_ptr) (WindowPtr window,
                                           PixmapPtr pixmap,
                                           Bool sync_flip);
 
+/* Called when the flip with id 'flip_event_id' has been fully processed internally,
+ * and the Extension is waiting with regards to this flip for the information,
+ * that the flips isn't pending anymore.
+ */
+typedef void (*present_flip_executed_ptr) (WindowPtr window, RRCrtcPtr crtc, uint64_t flip_event_id, RegionPtr damage);
+
 /* "unflip" back to the regular screen scanout buffer
  *
  * present_event_notify should be called with 'event_id' when the unflip occurs.
@@ -139,6 +145,7 @@ typedef struct present_winmode_screen_info {
     uint32_t                            capabilities;
     present_check_flip_ptr              check_flip;
     present_winmode_flip_ptr            flip;
+    present_flip_executed_ptr           flip_executed;
     present_winmode_unflip_ptr          unflip;
 
 } present_winmode_screen_info_rec, *present_winmode_screen_info_ptr;

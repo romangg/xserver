@@ -4,6 +4,7 @@ srcs = [
     'xwayland-cursor.c',
     'xwayland-shm.c',
     'xwayland-output.c',
+    'xwayland-present.c',
     'xwayland-cvt.c',
     'xwayland-vidmode.c',
     '../../mi/miinitext.c',

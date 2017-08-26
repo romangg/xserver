@@ -363,7 +363,9 @@ static void
 present_winmode_execute(present_vblank_ptr vblank, uint64_t ust, uint64_t crtc_msc)
 {
     WindowPtr               window = vblank->window;
+    ScreenPtr               screen = window->drawable.pScreen;
     present_window_priv_ptr window_priv = present_window_priv(window);
+    present_screen_priv_ptr screen_priv = present_screen_priv(screen);
 
     if (present_execute_wait(vblank, crtc_msc))
         return;
@@ -419,6 +421,9 @@ present_winmode_execute(present_vblank_ptr vblank, uint64_t ust, uint64_t crtc_m
                     damage = &window->clipList;
 
                 DamageDamageRegion(&vblank->window->drawable, damage);
+                if (*screen_priv->winmode_info->flip_executed)
+                    (*screen_priv->winmode_info->flip_executed) (vblank->window, vblank->crtc, vblank->event_id, damage);
+
 
                 return;
             }
