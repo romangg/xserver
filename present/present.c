@@ -242,7 +242,7 @@ present_get_crtc(WindowPtr window)
     return (*screen_priv->info->get_crtc)(window);
 }
 
-static uint32_t
+uint32_t
 present_query_capabilities(RRCrtcPtr crtc)
 {
     present_screen_priv_ptr     screen_priv;

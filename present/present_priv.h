@@ -125,9 +125,6 @@ struct present_screen_priv {
 
     present_priv_check_flip_window_ptr  check_flip_window;
 
-    present_priv_queue_vblank_ptr       queue_vblank;
-    present_priv_re_execute_ptr         re_execute;
-
     present_priv_abort_vblank_ptr       abort_vblank;
     present_priv_flip_destroy_ptr       flip_destroy;
     };
@@ -160,7 +157,7 @@ typedef struct present_event {
     int mask;
 } present_event_rec;
 
-struct present_window_priv {
+typedef struct present_window_priv {
     present_event_ptr      events;
     RRCrtcPtr              crtc;        /* Last reported CRTC from get_ust_msc */
     uint64_t               msc_offset;
