@@ -58,7 +58,7 @@ present_close_screen(ScreenPtr screen)
 {
     present_screen_priv_ptr screen_priv = present_screen_priv(screen);
 
-    screen_priv->flips_destroy(screen);
+    screen_priv->flip_destroy(screen);
 
     unwrap(screen_priv, screen, CloseScreen);
     (*screen->CloseScreen) (screen);
@@ -198,6 +198,8 @@ present_screen_init(ScreenPtr screen, present_screen_info_ptr info)
         screen_priv->info = info;
 
         dixSetPrivate(&screen->devPrivates, &present_screen_private_key, screen_priv);
+
+        present_init_mode_hooks(screen_priv);
 
         present_fake_screen_init(screen);
     }

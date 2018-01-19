@@ -242,7 +242,7 @@ present_get_crtc(WindowPtr window)
     return (*screen_priv->info->get_crtc)(window);
 }
 
-uint32_t
+static uint32_t
 present_query_capabilities(RRCrtcPtr crtc)
 {
     present_screen_priv_ptr     screen_priv;
@@ -556,7 +556,7 @@ present_event_notify(uint64_t event_id, uint64_t ust, uint64_t msc)
  * 'window' is being reconfigured. Check to see if it is involved
  * in flipping and clean up as necessary
  */
-void
+static void
 present_check_flip_window (WindowPtr window)
 {
     ScreenPtr                   screen = window->drawable.pScreen;
@@ -970,7 +970,7 @@ no_mem:
     return ret;
 }
 
-void
+static void
 present_abort_vblank(ScreenPtr screen, RRCrtcPtr crtc, uint64_t event_id, uint64_t msc)
 {
     present_vblank_ptr  vblank;
@@ -1021,7 +1021,7 @@ present_notify_msc(WindowPtr window,
                           target_msc, divisor, remainder, NULL, 0);
 }
 
-void
+static void
 present_flip_destroy(ScreenPtr screen)
 {
     present_screen_priv_ptr     screen_priv = present_screen_priv(screen);
@@ -1065,6 +1065,17 @@ present_vblank_destroy(present_vblank_ptr vblank)
         present_destroy_notifies(vblank->notifies, vblank->num_notifies);
 
     free(vblank);
+}
+
+void
+present_init_mode_hooks(present_screen_priv_ptr screen_priv)
+{
+    screen_priv->query_capabilities =   &present_query_capabilities;
+
+    screen_priv->check_flip_window  =   &present_check_flip_window;
+
+    screen_priv->abort_vblank       =   &present_abort_vblank;
+    screen_priv->flip_destroy       =   &present_flip_destroy;
 }
 
 Bool
