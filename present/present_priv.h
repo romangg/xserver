@@ -180,7 +180,7 @@ present_window_priv_ptr
 present_get_window_priv(WindowPtr window, Bool create);
 
 /*
- * present.c
+ * present_s_md.c
  */
 int
 present_pixmap(WindowPtr window,

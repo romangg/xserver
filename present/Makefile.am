@@ -5,7 +5,7 @@ AM_CFLAGS = \
 
 libpresent_la_SOURCES = \
 	present.h \
-	present.c \
+	present_s_md.c \
 	present_event.c \
 	present_fake.c \
 	present_fence.c \
