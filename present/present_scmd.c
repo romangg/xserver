@@ -36,6 +36,27 @@ static uint64_t         present_event_id;
 static struct xorg_list present_exec_queue;
 static struct xorg_list present_flip_queue;
 
+static uint32_t
+present_s_md_query_capabilities(present_screen_priv_ptr screen_priv)
+{
+    if (!screen_priv->info)
+        return 0;
+
+    return screen_priv->info->capabilities;
+}
+
+static RRCrtcPtr
+present_s_md_get_crtc(present_screen_priv_ptr screen_priv, WindowPtr window)
+{
+    if (!screen_priv)
+        return NULL;
+
+    if (!screen_priv->info)
+        return NULL;
+
+    return (*screen_priv->info->get_crtc)(window);
+}
+
 static void
 present_execute(present_vblank_ptr vblank, uint64_t ust, uint64_t crtc_msc);
 
@@ -887,7 +908,8 @@ present_flip_destroy(ScreenPtr screen)
 void
 present_init_mode_hooks(present_screen_priv_ptr screen_priv)
 {
-    screen_priv->query_capabilities =   &present_query_capabilities;
+    screen_priv->query_capabilities =   &present_s_md_query_capabilities;
+    screen_priv->get_crtc           =   &present_s_md_get_crtc;
 
     screen_priv->check_flip_window  =   &present_check_flip_window;
 

@@ -131,6 +131,7 @@ struct present_screen_priv {
 
     /* Mode hooks */
     present_priv_query_capabilities_ptr query_capabilities;
+    present_priv_get_crtc_ptr           get_crtc;
 
     present_priv_check_flip_window_ptr  check_flip_window;
 

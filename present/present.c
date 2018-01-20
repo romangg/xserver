@@ -104,8 +104,7 @@ present_get_crtc(WindowPtr window)
     if (!screen_priv)
         return NULL;
 
-    if (!screen_priv->info)
-        return NULL;
+    assert (screen_priv->get_crtc);
 
     return screen_priv->get_crtc(screen_priv, window);
 }
@@ -123,8 +122,7 @@ present_query_capabilities(RRCrtcPtr crtc)
     if (!screen_priv)
         return 0;
 
-    if (!screen_priv->info)
-        return 0;
+    assert (screen_priv->query_capabilities);
 
     return screen_priv->query_capabilities(screen_priv);
 }
