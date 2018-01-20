@@ -161,7 +161,7 @@ present_clip_notify(WindowPtr window, int dx, int dy)
     ScreenPtr screen = window->drawable.pScreen;
     present_screen_priv_ptr screen_priv = present_screen_priv(screen);
 
-    present_check_flip_window(window);
+    screen_priv->check_flip_window(window);
     unwrap(screen_priv, screen, ClipNotify)
     if (screen->ClipNotify)
         screen->ClipNotify (window, dx, dy);

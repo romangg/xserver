@@ -84,6 +84,20 @@ struct present_vblank {
     Bool                abort_flip;     /* aborting this flip */
 };
 
+/*
+ * Mode hooks
+ */
+typedef Bool (*present_priv_check_flip_ptr)(RRCrtcPtr crtc,
+                                            WindowPtr window,
+                                            PixmapPtr pixmap,
+                                            Bool sync_flip,
+                                            RegionPtr valid,
+                                            int16_t x_off,
+                                            int16_t y_off);
+typedef void (*present_priv_check_flip_window_ptr)(WindowPtr window);
+
+typedef void (*present_priv_create_event_id_ptr)(present_vblank_ptr vblank);
+
 typedef struct present_screen_priv {
     CloseScreenProcPtr          CloseScreen;
     ConfigNotifyProcPtr         ConfigNotify;
@@ -104,6 +118,12 @@ typedef struct present_screen_priv {
     Bool                        flip_sync;
 
     present_screen_info_ptr     info;
+
+    /* Mode hooks */
+    present_priv_check_flip_ptr         check_flip;
+    present_priv_check_flip_window_ptr  check_flip_window;
+
+    present_priv_create_event_id_ptr    create_event_id;
 } present_screen_priv_rec, *present_screen_priv_ptr;
 
 #define wrap(priv,real,mem,func) {\
@@ -218,14 +238,14 @@ present_restore_screen_pixmap(ScreenPtr screen);
 void
 present_set_abort_flip(ScreenPtr screen);
 
-void
-present_check_flip_window(WindowPtr window);
-
 RRCrtcPtr
 present_get_crtc(WindowPtr window);
 
 uint32_t
 present_query_capabilities(RRCrtcPtr crtc);
+
+void
+present_scmd_init_mode_hooks(present_screen_priv_ptr screen_priv);
 
 Bool
 present_init(void);
