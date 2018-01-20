@@ -325,6 +325,7 @@ present_pixmap(WindowPtr window,
 
 int
 present_notify_msc(WindowPtr window,
+                   ClientPtr client,
                    CARD32 serial,
                    uint64_t target_msc,
                    uint64_t divisor,
@@ -332,6 +333,7 @@ present_notify_msc(WindowPtr window,
 {
     return present_pixmap(window,
                           NULL,
+                          client,
                           serial,
                           NULL, NULL,
                           0, 0,
@@ -445,6 +447,7 @@ no_mem:
     return NULL;
 }
 
+void
 present_vblank_scrap(present_vblank_ptr vblank)
 {
     DebugPresent(("\tx %lld %p %8lld: %08lx -> %08lx (crtc %p)\n",

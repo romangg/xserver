@@ -40,13 +40,19 @@ present_get_window_priv(WindowPtr window, Bool create)
 
     if (!create || window_priv != NULL)
         return window_priv;
+
     window_priv = calloc (1, sizeof (present_window_priv_rec));
     if (!window_priv)
         return NULL;
+
     xorg_list_init(&window_priv->vblank);
     xorg_list_init(&window_priv->notifies);
+
+    window_priv->window = window;
     window_priv->crtc = PresentCrtcNeverSet;
+
     dixSetPrivate(&window->devPrivates, &present_window_private_key, window_priv);
+
     return window_priv;
 }
 
@@ -97,11 +103,11 @@ present_clear_window_flip(WindowPtr window)
     present_vblank_ptr          flip_pending = screen_priv->flip_pending;
 
     if (flip_pending && flip_pending->window == window) {
-        present_set_abort_flip(screen);
+        present_scmd_set_abort_flip(screen);
         flip_pending->window = NULL;
     }
     if (screen_priv->flip_window == window) {
-        present_restore_screen_pixmap(screen);
+        present_scmd_restore_screen_pixmap(screen);
         screen_priv->flip_window = NULL;
     }
 }
@@ -199,7 +205,7 @@ present_screen_init(ScreenPtr screen, present_screen_info_ptr info)
 
         dixSetPrivate(&screen->devPrivates, &present_screen_private_key, screen_priv);
 
-        present_init_mode_hooks(screen_priv);
+        present_scmd_init_mode_hooks(screen_priv);
 
         present_fake_screen_init(screen);
     }

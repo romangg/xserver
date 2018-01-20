@@ -60,28 +60,6 @@ present_scmd_get_crtc(present_screen_priv_ptr screen_priv, WindowPtr window)
 static void
 present_scmd_execute(present_vblank_ptr vblank, uint64_t ust, uint64_t crtc_msc);
 
-/*
- * Returns:
- * TRUE if the first MSC value is after the second one
- * FALSE if the first MSC value is equal to or before the second one
- */
-static Bool
-msc_is_after(uint64_t test, uint64_t reference)
-{
-    return (int64_t)(test - reference) > 0;
-}
-
-/*
- * Returns:
- * TRUE if the first MSC value is equal to or after the second one
- * FALSE if the first MSC value is before the second one
- */
-static Bool
-msc_is_equal_or_after(uint64_t test, uint64_t reference)
-{
-    return (int64_t)(test - reference) >= 0;
-}
-
 static inline PixmapPtr
 present_scmd_flip_pending_pixmap(ScreenPtr screen)
 {
@@ -641,7 +619,7 @@ present_scmd_execute(present_vblank_ptr vblank, uint64_t ust, uint64_t crtc_msc)
 }
 
 int
-present_scmd_pixmap(WindowPtr window,
+present_scmd_present_pixmap(WindowPtr window,
                PixmapPtr pixmap,
                ClientPtr client,
                CARD32 serial,
@@ -872,26 +850,6 @@ present_scmd_abort_vblank(ScreenPtr screen, RRCrtcPtr crtc, uint64_t event_id, u
     }
 }
 
-int
-present_notify_msc(WindowPtr window,
-                   ClientPtr client,
-                   CARD32 serial,
-                   uint64_t target_msc,
-                   uint64_t divisor,
-                   uint64_t remainder)
-{
-    return present_scmd_pixmap(window,
-                          NULL,
-                          client,
-                          serial,
-                          NULL, NULL,
-                          0, 0,
-                          NULL,
-                          NULL, NULL,
-                          divisor == 0 ? PresentOptionAsync : 0,
-                          target_msc, divisor, remainder, NULL, 0);
-}
-
 static void
 present_scmd_flip_destroy(ScreenPtr screen)
 {
@@ -911,7 +869,14 @@ present_scmd_init_mode_hooks(present_screen_priv_ptr screen_priv)
     screen_priv->query_capabilities =   &present_scmd_query_capabilities;
     screen_priv->get_crtc           =   &present_scmd_get_crtc;
 
+    screen_priv->check_flip         =   &present_scmd_check_flip;
     screen_priv->check_flip_window  =   &present_scmd_check_flip_window;
+
+    screen_priv->present_pixmap     =   &present_scmd_present_pixmap;
+    screen_priv->create_event_id    =   &present_scmd_create_event_id;
+    screen_priv->queue_vblank       =   &present_scmd_queue_vblank;
+    screen_priv->flush              =   &present_scmd_flush;
+    screen_priv->re_execute         =   &present_scmd_re_execute;
 
     screen_priv->abort_vblank       =   &present_scmd_abort_vblank;
     screen_priv->flip_destroy       =   &present_scmd_flip_destroy;

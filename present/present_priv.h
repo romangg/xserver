@@ -98,7 +98,42 @@ typedef RRCrtcPtr (*present_priv_get_crtc_ptr)(present_screen_priv_ptr screen_pr
                                                WindowPtr window);
 //
 // check_flip
+typedef Bool (*present_priv_check_flip_ptr)(RRCrtcPtr crtc,
+                                            WindowPtr window,
+                                            PixmapPtr pixmap,
+                                            Bool sync_flip,
+                                            RegionPtr valid,
+                                            int16_t x_off,
+                                            int16_t y_off);
 typedef void (*present_priv_check_flip_window_ptr)(WindowPtr window);
+//
+// presentation
+typedef int (*present_priv_pixmap_ptr)(present_window_priv_ptr window,
+                                       PixmapPtr pixmap,
+                                       ClientPtr client,
+                                       CARD32 serial,
+                                       RegionPtr valid,
+                                       RegionPtr update,
+                                       int16_t x_off,
+                                       int16_t y_off,
+                                       RRCrtcPtr target_crtc,
+                                       SyncFence *wait_fence,
+                                       SyncFence *idle_fence,
+                                       uint32_t options,
+                                       uint64_t window_msc,
+                                       uint64_t divisor,
+                                       uint64_t remainder,
+                                       present_notify_ptr notifies,
+                                       int num_notifies);
+typedef void (*present_priv_create_event_id_ptr)(present_window_priv_ptr window_priv,
+                                                 present_vblank_ptr vblank);
+typedef int (*present_priv_queue_vblank_ptr)(ScreenPtr screen,
+                                             WindowPtr window,
+                                             RRCrtcPtr crtc,
+                                             uint64_t event_id,
+                                             uint64_t msc);
+typedef void (*present_priv_flush_ptr)(WindowPtr window);
+typedef void (*present_priv_re_execute_ptr)(present_vblank_ptr vblank);
 //
 // abort and cleanup
 typedef void (*present_priv_abort_vblank_ptr)(ScreenPtr screen,
@@ -133,7 +168,14 @@ struct present_screen_priv {
     present_priv_query_capabilities_ptr query_capabilities;
     present_priv_get_crtc_ptr           get_crtc;
 
+    present_priv_check_flip_ptr         check_flip;
     present_priv_check_flip_window_ptr  check_flip_window;
+
+    present_priv_pixmap_ptr             present_pixmap;
+    present_priv_create_event_id_ptr    create_event_id;
+    present_priv_queue_vblank_ptr       queue_vblank;
+    present_priv_flush_ptr              flush;
+    present_priv_re_execute_ptr         re_execute;
 
     present_priv_abort_vblank_ptr       abort_vblank;
     present_priv_flip_destroy_ptr       flip_destroy;
@@ -168,6 +210,7 @@ typedef struct present_event {
 } present_event_rec;
 
 typedef struct present_window_priv {
+    WindowPtr              window;
     present_event_ptr      events;
     RRCrtcPtr              crtc;        /* Last reported CRTC from get_ust_msc */
     uint64_t               msc_offset;
@@ -190,7 +233,28 @@ present_window_priv_ptr
 present_get_window_priv(WindowPtr window, Bool create);
 
 /*
- * present_s_md.c
+ * Returns:
+ * TRUE if the first MSC value is after the second one
+ * FALSE if the first MSC value is equal to or before the second one
+ */
+static inline Bool
+msc_is_after(uint64_t test, uint64_t reference)
+{
+    return (int64_t)(test - reference) > 0;
+}
+/*
+ * Returns:
+ * TRUE if the first MSC value is equal to or after the second one
+ * FALSE if the first MSC value is before the second one
+ */
+static inline Bool
+msc_is_equal_or_after(uint64_t test, uint64_t reference)
+{
+    return (int64_t)(test - reference) >= 0;
+}
+
+/*
+ * present.c
  */
 int
 present_pixmap(WindowPtr window,
@@ -223,10 +287,7 @@ void
 present_vblank_destroy(present_vblank_ptr vblank);
 
 void
-present_restore_screen_pixmap(ScreenPtr screen);
-
-void
-present_set_abort_flip(ScreenPtr screen);
+present_check_flip_window(WindowPtr window);
 
 RRCrtcPtr
 present_get_crtc(WindowPtr window);
@@ -234,11 +295,75 @@ present_get_crtc(WindowPtr window);
 uint32_t
 present_query_capabilities(RRCrtcPtr crtc);
 
-void
-present_init_mode_hooks(present_screen_priv_ptr screen_priv);
-
 Bool
 present_init(void);
+
+present_vblank_ptr
+present_vblank_create(present_window_priv_ptr window_priv,
+                      PixmapPtr pixmap,
+                      CARD32 serial,
+                      RegionPtr valid,
+                      RegionPtr update,
+                      int16_t x_off,
+                      int16_t y_off,
+                      RRCrtcPtr target_crtc,
+                      SyncFence *wait_fence,
+                      SyncFence *idle_fence,
+                      uint32_t options,
+                      const uint32_t *capabilities,
+                      present_notify_ptr notifies,
+                      int num_notifies,
+                      uint64_t *target_msc,
+                      uint64_t crtc_msc);
+
+void
+present_vblank_scrap(present_vblank_ptr vblank);
+
+void
+present_adjust_timings(uint32_t options,
+                       uint64_t *crtc_msc,
+                       uint64_t *target_msc,
+                       uint64_t divisor,
+                       uint64_t remainder);
+
+void
+present_execute_post(present_vblank_ptr vblank, uint64_t ust, uint64_t crtc_msc);
+
+void
+present_execute_copy(present_vblank_ptr vblank, uint64_t crtc_msc);
+
+void
+present_set_tree_pixmap(WindowPtr window,
+                        PixmapPtr expected,
+                        PixmapPtr pixmap);
+
+Bool
+present_execute_wait(present_vblank_ptr vblank, uint64_t crtc_msc);
+
+void
+present_pixmap_idle(PixmapPtr pixmap, WindowPtr window, CARD32 serial, struct present_fence *present_fence);
+
+void
+present_vblank_notify(present_vblank_ptr vblank, CARD8 kind, CARD8 mode, uint64_t ust, uint64_t crtc_msc);
+
+void
+present_copy_region(DrawablePtr drawable,
+                    PixmapPtr pixmap,
+                    RegionPtr update,
+                    int16_t x_off,
+                    int16_t y_off);
+
+/*
+ * present_scmd.c
+ */
+void
+present_scmd_set_abort_flip(ScreenPtr screen);
+
+void
+present_scmd_restore_screen_pixmap(ScreenPtr screen);
+
+void
+present_scmd_init_mode_hooks(present_screen_priv_ptr screen_priv);
 
 /*
  * present_event.c
