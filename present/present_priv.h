@@ -35,6 +35,12 @@
 #include <xfixes.h>
 #include <randrstr.h>
 
+#if 0
+#define DebugPresent(x) ErrorF x
+#else
+#define DebugPresent(x)
+#endif
+
 extern int present_request;
 
 extern DevPrivateKeyRec present_screen_private_key;
@@ -79,6 +85,7 @@ struct present_vblank {
 };
 
 typedef struct present_screen_priv present_screen_priv_rec, *present_screen_priv_ptr;
+typedef struct present_window_priv present_window_priv_rec, *present_window_priv_ptr;
 
 /*
  * Mode hooks
@@ -87,6 +94,8 @@ typedef struct present_screen_priv present_screen_priv_rec, *present_screen_priv
 //
 // general setup
 typedef uint32_t (*present_priv_query_capabilities_ptr)(present_screen_priv_ptr screen_priv);
+typedef RRCrtcPtr (*present_priv_get_crtc_ptr)(present_screen_priv_ptr screen_priv,
+                                               WindowPtr window);
 //
 // check_flip
 typedef void (*present_priv_check_flip_window_ptr)(WindowPtr window);

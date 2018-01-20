@@ -36,12 +36,6 @@ static uint64_t         present_event_id;
 static struct xorg_list present_exec_queue;
 static struct xorg_list present_flip_queue;
 
-#if 0
-#define DebugPresent(x) ErrorF x
-#else
-#define DebugPresent(x)
-#endif
-
 static void
 present_execute(present_vblank_ptr vblank, uint64_t ust, uint64_t crtc_msc);
 

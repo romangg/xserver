@@ -126,7 +126,7 @@ present_query_capabilities(RRCrtcPtr crtc)
     if (!screen_priv->info)
         return 0;
 
-    return screen_priv->info->capabilities;
+    return screen_priv->query_capabilities(screen_priv);
 }
 
 struct pixmap_visit {
@@ -146,7 +146,7 @@ present_set_tree_pixmap_visit(WindowPtr window, void *data)
     return WT_WALKCHILDREN;
 }
 
-static void
+void
 present_set_tree_pixmap(WindowPtr window,
                         PixmapPtr expected,
                         PixmapPtr pixmap)
@@ -173,7 +173,111 @@ static void
 present_wait_fence_triggered(void *param)
 {
     present_vblank_ptr  vblank = param;
-    present_re_execute(vblank);
+    ScreenPtr           screen = vblank->screen;
+    present_screen_priv_ptr screen_priv = present_screen_priv(screen);
+    screen_priv->re_execute(vblank);
+}
+
+Bool
+present_execute_wait(present_vblank_ptr vblank, uint64_t crtc_msc)
+{
+    WindowPtr               window = vblank->window;
+    ScreenPtr               screen = window->drawable.pScreen;
+    present_screen_priv_ptr screen_priv = present_screen_priv(screen);
+
+    if (vblank->requeue) {
+              vblank->requeue = FALSE;
+              if (msc_is_after(vblank->target_msc, crtc_msc) &&
+                  Success == screen_priv->queue_vblank(screen,
+                                                       vblank->window,
+                                                       vblank->crtc,
+                                                       vblank->event_id,
+                                                       vblank->target_msc))
+                  return TRUE;
+    }
+
+    if (vblank->wait_fence) {
+        if (!present_fence_check_triggered(vblank->wait_fence)) {
+            present_fence_set_callback(vblank->wait_fence, present_wait_fence_triggered, vblank);
+            return TRUE;
+        }
+    }
+    return FALSE;
+}
+
+void
+present_execute_copy(present_vblank_ptr vblank, uint64_t crtc_msc)
+{
+    WindowPtr                   window = vblank->window;
+    ScreenPtr                   screen = window->drawable.pScreen;
+    present_screen_priv_ptr screen_priv = present_screen_priv(screen);
+
+    /* If present_flip failed, we may have to requeue for the target MSC */
+    if (vblank->target_msc == crtc_msc + 1 &&
+        Success == screen_priv->queue_vblank(screen,
+                                             vblank->window,
+                                             vblank->crtc,
+                                             vblank->event_id,
+                                             vblank->target_msc)) {
+        vblank->queued = TRUE;
+        return;
+    }
+
+    present_copy_region(&window->drawable, vblank->pixmap, vblank->update, vblank->x_off, vblank->y_off);
+
+    /* present_copy_region sticks the region into a scratch GC,
+     * which is then freed, freeing the region
+     */
+    vblank->update = NULL;
+    screen_priv->flush(window);
+
+    present_pixmap_idle(vblank->pixmap, vblank->window, vblank->serial, vblank->idle_fence);
+}
+
+void
+present_execute_post(present_vblank_ptr vblank, uint64_t ust, uint64_t crtc_msc)
+{
+    uint8_t mode;
+    /* Compute correct CompleteMode
+     */
+    if (vblank->kind == PresentCompleteKindPixmap) {
+        if (vblank->pixmap && vblank->window)
+            mode = PresentCompleteModeCopy;
+        else
+            mode = PresentCompleteModeSkip;
+    }
+    else
+        mode = PresentCompleteModeCopy;
+
+    present_vblank_notify(vblank, vblank->kind, mode, ust, crtc_msc);
+    present_vblank_destroy(vblank);
+}
+
+void
+present_adjust_timings(uint32_t options,
+                       uint64_t *crtc_msc,
+                       uint64_t *target_msc,
+                       uint64_t divisor,
+                       uint64_t remainder)
+{
+    /* Adjust target_msc to match modulus
+     */
+    if (msc_is_equal_or_after(*crtc_msc, *target_msc)) {
+        if (divisor != 0) {
+            *target_msc = *crtc_msc - (*crtc_msc % divisor) + remainder;
+            if (options & PresentOptionAsync) {
+                if (msc_is_after(*crtc_msc, *target_msc))
+                    *target_msc += divisor;
+            } else {
+                if (msc_is_equal_or_after(*crtc_msc, *target_msc))
+                    *target_msc += divisor;
+            }
+        } else {
+            *target_msc = *crtc_msc;
+            if (!(options & PresentOptionAsync))
+                (*target_msc)++;
+        }
+    }
 }
 
 int
@@ -219,6 +323,144 @@ present_pixmap(WindowPtr window,
                                        remainder,
                                        notifies,
                                        num_notifies);
+}
+
+int
+present_notify_msc(WindowPtr window,
+                   CARD32 serial,
+                   uint64_t target_msc,
+                   uint64_t divisor,
+                   uint64_t remainder)
+{
+    return present_pixmap(window,
+                          NULL,
+                          serial,
+                          NULL, NULL,
+                          0, 0,
+                          NULL,
+                          NULL, NULL,
+                          divisor == 0 ? PresentOptionAsync : 0,
+                          target_msc, divisor, remainder, NULL, 0);
+}
+
+present_vblank_ptr
+present_vblank_create(present_window_priv_ptr window_priv,
+                      PixmapPtr pixmap,
+                      CARD32 serial,
+                      RegionPtr valid,
+                      RegionPtr update,
+                      int16_t x_off,
+                      int16_t y_off,
+                      RRCrtcPtr target_crtc,
+                      SyncFence *wait_fence,
+                      SyncFence *idle_fence,
+                      uint32_t options,
+                      const uint32_t *capabilities,
+                      present_notify_ptr notifies,
+                      int num_notifies,
+                      uint64_t *target_msc,
+                      uint64_t crtc_msc)
+{
+    WindowPtr                   window = window_priv->window;
+    ScreenPtr                   screen = window->drawable.pScreen;
+    present_screen_priv_ptr     screen_priv = present_screen_priv(screen);
+    present_vblank_ptr          vblank;
+
+    vblank = calloc (1, sizeof (present_vblank_rec));
+    if (!vblank)
+        return NULL;
+
+    xorg_list_init(&vblank->event_queue);
+
+    vblank->screen = screen;
+    vblank->window = window;
+    vblank->pixmap = pixmap;
+
+    screen_priv->create_event_id(window_priv, vblank);
+
+    if (pixmap) {
+        vblank->kind = PresentCompleteKindPixmap;
+        pixmap->refcnt++;
+    } else
+        vblank->kind = PresentCompleteKindNotifyMSC;
+
+    vblank->serial = serial;
+
+    if (valid) {
+        vblank->valid = RegionDuplicate(valid);
+        if (!vblank->valid)
+            goto no_mem;
+    }
+    if (update) {
+        vblank->update = RegionDuplicate(update);
+        if (!vblank->update)
+            goto no_mem;
+    }
+
+    vblank->x_off = x_off;
+    vblank->y_off = y_off;
+
+    vblank->target_msc = *target_msc;
+    vblank->crtc = target_crtc;
+    vblank->msc_offset = window_priv->msc_offset;
+    vblank->notifies = notifies;
+    vblank->num_notifies = num_notifies;
+
+    if (pixmap != NULL &&
+        !(options & PresentOptionCopy) &&
+        capabilities) {
+        if (msc_is_after(*target_msc, crtc_msc) &&
+            screen_priv->check_flip (target_crtc, window, pixmap, TRUE, valid, x_off, y_off))
+        {
+            vblank->flip = TRUE;
+            vblank->sync_flip = TRUE;
+            *target_msc = *target_msc - 1;
+        } else if ((*capabilities & PresentCapabilityAsync) &&
+                    screen_priv->check_flip (target_crtc, window, pixmap, FALSE, valid, x_off, y_off))
+        {
+          vblank->flip = TRUE;
+        }
+    }
+
+    if (wait_fence) {
+        vblank->wait_fence = present_fence_create(wait_fence);
+        if (!vblank->wait_fence)
+            goto no_mem;
+    }
+
+    if (idle_fence) {
+        vblank->idle_fence = present_fence_create(idle_fence);
+        if (!vblank->idle_fence)
+            goto no_mem;
+    }
+
+    if (pixmap)
+        DebugPresent(("q %lld %p %8lld: %08lx -> %08lx (crtc %p) flip %d vsync %d serial %d\n",
+                      vblank->event_id, vblank, *target_msc,
+                      vblank->pixmap->drawable.id, vblank->window->drawable.id,
+                      target_crtc, vblank->flip, vblank->sync_flip, vblank->serial));
+    return vblank;
+
+no_mem:
+    vblank->notifies = NULL;
+    present_vblank_destroy(vblank);
+    return NULL;
+}
+
+present_vblank_scrap(present_vblank_ptr vblank)
+{
+    DebugPresent(("\tx %lld %p %8lld: %08lx -> %08lx (crtc %p)\n",
+                  vblank->event_id, vblank, vblank->target_msc,
+                  vblank->pixmap->drawable.id, vblank->window->drawable.id,
+                  vblank->crtc));
+
+    present_pixmap_idle(vblank->pixmap, vblank->window, vblank->serial, vblank->idle_fence);
+    present_fence_destroy(vblank->idle_fence);
+    dixDestroyPixmap(vblank->pixmap, vblank->pixmap->drawable.id);
+
+    vblank->pixmap = NULL;
+    vblank->idle_fence = NULL;
+    vblank->flip = FALSE;
 }
 
 void
