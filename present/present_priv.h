@@ -35,6 +35,12 @@
 #include <xfixes.h>
 #include <randrstr.h>
 
+#if 0
+#define DebugPresent(x) ErrorF x
+#else
+#define DebugPresent(x)
+#endif
+
 extern int present_request;
 
 extern DevPrivateKeyRec present_screen_private_key;
@@ -149,6 +155,23 @@ present_window_priv(WindowPtr window)
 
 present_window_priv_ptr
 present_get_window_priv(WindowPtr window, Bool create);
+
+/*
+ * present.c
+ */
+void
+present_copy_region(DrawablePtr drawable,
+                    PixmapPtr pixmap,
+                    RegionPtr update,
+                    int16_t x_off,
+                    int16_t y_off);
+void
+present_pixmap_idle(PixmapPtr pixmap, WindowPtr window, CARD32 serial, struct present_fence *present_fence);
+
+void
+present_set_tree_pixmap(WindowPtr window,
+                        PixmapPtr expected,
+                        PixmapPtr pixmap);
 
 /*
  * present_scmd.c

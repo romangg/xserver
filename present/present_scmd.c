@@ -25,7 +25,6 @@
 #endif
 
 #include "present_priv.h"
-#include <gcstruct.h>
 #include <misync.h>
 #include <misyncstr.h>
 #ifdef MONOTONIC_CLOCK
@@ -35,12 +34,6 @@
 static uint64_t         present_event_id;
 static struct xorg_list present_exec_queue;
 static struct xorg_list present_flip_queue;
-
-#if 0
-#define DebugPresent(x) ErrorF x
-#else
-#define DebugPresent(x)
-#endif
 
 static void
 present_execute(present_vblank_ptr vblank, uint64_t ust, uint64_t crtc_msc);
@@ -65,42 +58,6 @@ static Bool
 msc_is_equal_or_after(uint64_t test, uint64_t reference)
 {
     return (int64_t)(test - reference) >= 0;
-}
-
-/*
- * Copies the update region from a pixmap to the target drawable
- */
-static void
-present_copy_region(DrawablePtr drawable,
-                    PixmapPtr pixmap,
-                    RegionPtr update,
-                    int16_t x_off,
-                    int16_t y_off)
-{
-    ScreenPtr   screen = drawable->pScreen;
-    GCPtr       gc;
-
-    gc = GetScratchGC(drawable->depth, screen);
-    if (update) {
-        ChangeGCVal     changes[2];
-
-        changes[0].val = x_off;
-        changes[1].val = y_off;
-        ChangeGC(serverClient, gc,
-                 GCClipXOrigin|GCClipYOrigin,
-                 changes);
-        (*gc->funcs->ChangeClip)(gc, CT_REGION, update, 0);
-    }
-    ValidateGC(drawable, gc);
-    (*gc->ops->CopyArea)(&pixmap->drawable,
-                         drawable,
-                         gc,
-                         0, 0,
-                         pixmap->drawable.width, pixmap->drawable.height,
-                         x_off, y_off);
-    if (update)
-        (*gc->funcs->ChangeClip)(gc, CT_NONE, NULL, 0);
-    FreeScratchGC(gc);
 }
 
 static inline PixmapPtr
@@ -213,17 +170,6 @@ present_vblank_notify(present_vblank_ptr vblank, CARD8 kind, CARD8 mode, uint64_
 
         if (window)
             present_send_complete_notify(window, kind, mode, serial, ust, crtc_msc - vblank->msc_offset, vblank->client);
-    }
-}
-
-static void
-present_pixmap_idle(PixmapPtr pixmap, WindowPtr window, CARD32 serial, struct present_fence *present_fence)
-{
-    if (present_fence)
-        present_fence_set_triggered(present_fence);
-    if (window) {
-        DebugPresent(("\ti %08lx\n", pixmap ? pixmap->drawable.id : 0));
-        present_send_idle_notify(window, serial, pixmap, present_fence);
     }
 }
 
@@ -376,41 +322,6 @@ present_flip_idle(ScreenPtr screen)
         screen_priv->flip_pixmap = NULL;
         screen_priv->flip_idle_fence = NULL;
     }
-}
-
-struct pixmap_visit {
-    PixmapPtr   old;
-    PixmapPtr   new;
-};
-
-static int
-present_set_tree_pixmap_visit(WindowPtr window, void *data)
-{
-    struct pixmap_visit *visit = data;
-    ScreenPtr           screen = window->drawable.pScreen;
-
-    if ((*screen->GetWindowPixmap)(window) != visit->old)
-        return WT_DONTWALKCHILDREN;
-    (*screen->SetWindowPixmap)(window, visit->new);
-    return WT_WALKCHILDREN;
-}
-
-static void
-present_set_tree_pixmap(WindowPtr window,
-                        PixmapPtr expected,
-                        PixmapPtr pixmap)
-{
-    struct pixmap_visit visit;
-    ScreenPtr           screen = window->drawable.pScreen;
-
-    visit.old = (*screen->GetWindowPixmap)(window);
-    if (expected && visit.old != expected)
-        return;
-
-    visit.new = pixmap;
-    if (visit.old == visit.new)
-        return;
-    TraverseTree(window, present_set_tree_pixmap_visit, &visit);
 }
 
 void
