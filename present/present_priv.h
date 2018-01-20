@@ -151,7 +151,7 @@ present_window_priv_ptr
 present_get_window_priv(WindowPtr window, Bool create);
 
 /*
- * present.c
+ * present_scmd.c
  */
 int
 present_pixmap(WindowPtr window,
