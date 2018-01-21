@@ -194,6 +194,8 @@ present_screen_init(ScreenPtr screen, present_screen_info_ptr info)
 
         dixSetPrivate(&screen->devPrivates, &present_screen_private_key, screen_priv);
 
+        present_scmd_init_mode_hooks(screen_priv);
+
         present_fake_screen_init(screen);
     }
 
