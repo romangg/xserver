@@ -96,6 +96,24 @@ typedef Bool (*present_priv_check_flip_ptr)(RRCrtcPtr crtc,
                                             int16_t y_off);
 typedef void (*present_priv_check_flip_window_ptr)(WindowPtr window);
 
+typedef int (*present_priv_pixmap_ptr)(WindowPtr window,
+                                       PixmapPtr pixmap,
+                                       ClientPtr client,
+                                       CARD32 serial,
+                                       RegionPtr valid,
+                                       RegionPtr update,
+                                       int16_t x_off,
+                                       int16_t y_off,
+                                       RRCrtcPtr target_crtc,
+                                       SyncFence *wait_fence,
+                                       SyncFence *idle_fence,
+                                       uint32_t options,
+                                       uint64_t window_msc,
+                                       uint64_t divisor,
+                                       uint64_t remainder,
+                                       present_notify_ptr notifies,
+                                       int num_notifies);
+
 typedef void (*present_priv_create_event_id_ptr)(present_vblank_ptr vblank);
 
 typedef int (*present_priv_queue_vblank_ptr)(ScreenPtr screen,
@@ -130,6 +148,7 @@ typedef struct present_screen_priv {
     present_priv_check_flip_ptr         check_flip;
     present_priv_check_flip_window_ptr  check_flip_window;
 
+    present_priv_pixmap_ptr             present_pixmap;
     present_priv_create_event_id_ptr    create_event_id;
 
     present_priv_queue_vblank_ptr       queue_vblank;
@@ -216,9 +235,6 @@ present_set_tree_pixmap(WindowPtr window,
                         PixmapPtr expected,
                         PixmapPtr pixmap);
 
-/*
- * present_scmd.c
- */
 int
 present_pixmap(WindowPtr window,
                PixmapPtr pixmap,
@@ -246,6 +262,9 @@ present_notify_msc(WindowPtr window,
                    uint64_t divisor,
                    uint64_t remainder);
 
+/*
+ * present_scmd.c
+ */
 void
 present_abort_vblank(ScreenPtr screen, RRCrtcPtr crtc, uint64_t event_id, uint64_t msc);
 
