@@ -204,6 +204,7 @@ typedef struct present_event {
 } present_event_rec;
 
 struct present_window_priv {
+    WindowPtr              window;
     present_event_ptr      events;
     RRCrtcPtr              crtc;        /* Last reported CRTC from get_ust_msc */
     uint64_t               msc_offset;
