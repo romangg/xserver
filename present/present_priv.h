@@ -473,4 +473,16 @@ sproc_present_dispatch(ClientPtr client);
  * present_screen.c
  */
 
+/*
+ * present_wnmd.c
+ */
+void
+present_wnmd_set_abort_flip(WindowPtr window);
+
+void
+present_wnmd_restore_window_pixmap(WindowPtr window);
+
+void
+present_wnmd_init_mode_hooks(present_screen_priv_ptr screen_priv);
+
 #endif /*  _PRESENT_PRIV_H_ */
