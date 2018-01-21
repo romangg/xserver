@@ -155,6 +155,7 @@ typedef struct present_screen_priv {
     Bool                        flip_sync;
 
     present_screen_info_ptr     info;
+    present_wnmd_info_ptr       wnmd_info;
 
     /* Mode hooks */
     present_priv_query_capabilities_ptr query_capabilities;
