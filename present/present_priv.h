@@ -177,6 +177,17 @@ present_window_priv_ptr
 present_get_window_priv(WindowPtr window, Bool create);
 
 /*
+ * Returns:
+ * TRUE if the first MSC value is after the second one
+ * FALSE if the first MSC value is equal to or before the second one
+ */
+static inline Bool
+msc_is_after(uint64_t test, uint64_t reference)
+{
+    return (int64_t)(test - reference) > 0;
+}
+
+/*
  * present.c
  */
 void
