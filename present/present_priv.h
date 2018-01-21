@@ -84,6 +84,8 @@ struct present_vblank {
     Bool                abort_flip;     /* aborting this flip */
 };
 
+typedef struct present_window_priv present_window_priv_rec, *present_window_priv_ptr;
+
 /*
  * Mode hooks
  */
@@ -117,7 +119,8 @@ typedef int (*present_priv_pixmap_ptr)(WindowPtr window,
                                        present_notify_ptr notifies,
                                        int num_notifies);
 
-typedef void (*present_priv_create_event_id_ptr)(present_vblank_ptr vblank);
+typedef void (*present_priv_create_event_id_ptr)(present_window_priv_ptr window_priv,
+                                                 present_vblank_ptr vblank);
 
 typedef int (*present_priv_queue_vblank_ptr)(ScreenPtr screen,
                                              RRCrtcPtr crtc,
@@ -199,14 +202,25 @@ typedef struct present_event {
     int mask;
 } present_event_rec;
 
-typedef struct present_window_priv {
+struct present_window_priv {
     present_event_ptr      events;
     RRCrtcPtr              crtc;        /* Last reported CRTC from get_ust_msc */
     uint64_t               msc_offset;
     uint64_t               msc;         /* Last reported MSC from the current crtc */
     struct xorg_list       vblank;
     struct xorg_list       notifies;
-} present_window_priv_rec, *present_window_priv_ptr;
+
+    /* Used in window flip mode (wnmd) */
+    uint64_t               event_id;
+    struct xorg_list       exec_queue;
+    struct xorg_list       flip_queue;
+    struct xorg_list       idle_queue;
+
+    present_vblank_ptr     flip_pending;
+    present_vblank_ptr     flip_active;
+    uint64_t               unflip_event_id;
+    Bool                   restore_pixmap;
+};
 
 #define PresentCrtcNeverSet     ((RRCrtcPtr) 1)
 

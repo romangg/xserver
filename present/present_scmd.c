@@ -39,7 +39,7 @@ static void
 present_execute(present_vblank_ptr vblank, uint64_t ust, uint64_t crtc_msc);
 
 static void
-present_scmd_create_event_id(present_vblank_ptr vblank)
+present_scmd_create_event_id(present_window_priv_ptr window_priv, present_vblank_ptr vblank)
 {
     vblank->event_id = ++present_event_id;
 }
