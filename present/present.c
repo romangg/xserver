@@ -47,7 +47,7 @@ present_get_crtc(WindowPtr window)
     if (!screen_priv)
         return NULL;
 
-    return screen_priv->get_crtc(window);
+    return screen_priv->get_crtc(screen_priv, window);
 }
 
 uint32_t
@@ -63,7 +63,7 @@ present_query_capabilities(RRCrtcPtr crtc)
     if (!screen_priv)
         return 0;
 
-    return screen_priv->query_capabilities(crtc);
+    return screen_priv->query_capabilities(screen_priv);
 }
 
 /*

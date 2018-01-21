@@ -142,14 +142,8 @@ present_flip(RRCrtcPtr crtc,
 }
 
 static RRCrtcPtr
-present_scmd_get_crtc(WindowPtr window)
+present_scmd_get_crtc(present_screen_priv_ptr screen_priv, WindowPtr window)
 {
-    ScreenPtr                   screen = window->drawable.pScreen;
-    present_screen_priv_ptr     screen_priv = present_screen_priv(screen);
-
-    if (!screen_priv)
-        return NULL;
-
     if (!screen_priv->info)
         return NULL;
 
@@ -157,18 +151,8 @@ present_scmd_get_crtc(WindowPtr window)
 }
 
 static uint32_t
-present_scmd_query_capabilities(RRCrtcPtr crtc)
+present_scmd_query_capabilities(present_screen_priv_ptr screen_priv)
 {
-    present_screen_priv_ptr     screen_priv;
-
-    if (!crtc)
-        return 0;
-
-    screen_priv = present_screen_priv(crtc->pScreen);
-
-    if (!screen_priv)
-        return 0;
-
     if (!screen_priv->info)
         return 0;
 
@@ -203,6 +187,7 @@ present_flush(WindowPtr window)
 
 static int
 present_queue_vblank(ScreenPtr screen,
+                     WindowPtr window,
                      RRCrtcPtr crtc,
                      uint64_t event_id,
                      uint64_t msc)
@@ -702,7 +687,7 @@ present_scmd_pixmap(WindowPtr window,
     xorg_list_append(&vblank->event_queue, &present_exec_queue);
     vblank->queued = TRUE;
     if (msc_is_after(target_msc, crtc_msc)) {
-        ret = present_queue_vblank(screen, target_crtc, vblank->event_id, target_msc);
+        ret = present_queue_vblank(screen, window, target_crtc, vblank->event_id, target_msc);
         if (ret == Success)
             return Success;
 
@@ -715,7 +700,7 @@ present_scmd_pixmap(WindowPtr window,
 }
 
 static void
-present_scmd_abort_vblank(ScreenPtr screen, RRCrtcPtr crtc, uint64_t event_id, uint64_t msc)
+present_scmd_abort_vblank(ScreenPtr screen, WindowPtr window, RRCrtcPtr crtc, uint64_t event_id, uint64_t msc)
 {
     present_vblank_ptr  vblank;
 

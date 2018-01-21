@@ -84,13 +84,15 @@ struct present_vblank {
     Bool                abort_flip;     /* aborting this flip */
 };
 
+typedef struct present_screen_priv present_screen_priv_rec, *present_screen_priv_ptr;
 typedef struct present_window_priv present_window_priv_rec, *present_window_priv_ptr;
 
 /*
  * Mode hooks
  */
-typedef uint32_t (*present_priv_query_capabilities_ptr)(RRCrtcPtr crtc);
-typedef RRCrtcPtr (*present_priv_get_crtc_ptr)(WindowPtr window);
+typedef uint32_t (*present_priv_query_capabilities_ptr)(present_screen_priv_ptr screen_priv);
+typedef RRCrtcPtr (*present_priv_get_crtc_ptr)(present_screen_priv_ptr screen_priv,
+                                               WindowPtr window);
 
 typedef Bool (*present_priv_check_flip_ptr)(RRCrtcPtr crtc,
                                             WindowPtr window,
@@ -123,6 +125,7 @@ typedef void (*present_priv_create_event_id_ptr)(present_window_priv_ptr window_
                                                  present_vblank_ptr vblank);
 
 typedef int (*present_priv_queue_vblank_ptr)(ScreenPtr screen,
+                                             WindowPtr window,
                                              RRCrtcPtr crtc,
                                              uint64_t event_id,
                                              uint64_t msc);
@@ -130,12 +133,13 @@ typedef void (*present_priv_flush_ptr)(WindowPtr window);
 typedef void (*present_priv_re_execute_ptr)(present_vblank_ptr vblank);
 
 typedef void (*present_priv_abort_vblank_ptr)(ScreenPtr screen,
+                                              WindowPtr window,
                                               RRCrtcPtr crtc,
                                               uint64_t event_id,
                                               uint64_t msc);
 typedef void (*present_priv_flip_destroy_ptr)(ScreenPtr screen);
 
-typedef struct present_screen_priv {
+struct present_screen_priv {
     CloseScreenProcPtr          CloseScreen;
     ConfigNotifyProcPtr         ConfigNotify;
     DestroyWindowProcPtr        DestroyWindow;
@@ -173,7 +177,7 @@ typedef struct present_screen_priv {
 
     present_priv_abort_vblank_ptr       abort_vblank;
     present_priv_flip_destroy_ptr       flip_destroy;
-} present_screen_priv_rec, *present_screen_priv_ptr;
+};
 
 #define wrap(priv,real,mem,func) {\
     priv->mem = real->mem; \
