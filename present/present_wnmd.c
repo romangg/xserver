@@ -107,24 +107,39 @@ present_wnmd_free_idle_vblanks(WindowPtr window)
     }
 }
 
+static WindowPtr
+present_wnmd_toplvl_flip_window(WindowPtr window)
+{
+    ScreenPtr       screen = window->drawable.pScreen;
+    PixmapPtr       pixmap = (*screen->GetWindowPixmap)(window);
+    WindowPtr       w = window;
+    WindowPtr       next_w;
+
+    while(w->parent) {
+        next_w = w->parent;
+        if (next_w->drawable.id != pixmap->drawable.id) {
+            break;
+        }
+        w = next_w;
+    }
+    return w;
+}
+
 void
 present_wnmd_restore_window_pixmap(WindowPtr window)
 {
-    ScreenPtr                   screen = window->drawable.pScreen;
     present_window_priv_ptr     window_priv = present_window_priv(window);
-    PixmapPtr                   flip_pixmap, restore_pixmap;
+    WindowPtr                   toplvl = present_wnmd_toplvl_flip_window(window);
+    present_window_priv_ptr     toplvl_priv = present_window_priv(toplvl);
+    PixmapPtr                   flip_pixmap;
+    PixmapPtr                   restore_pixmap = window_priv->restore_pixmap;
 
-    if (!window_priv->restore_pixmap)
+    if (!restore_pixmap)
         return;
-    window_priv->restore_pixmap = FALSE;
 
     flip_pixmap = window_priv->flip_pending ? window_priv->flip_pending->pixmap :
                                               window_priv->flip_active->pixmap;
     assert (flip_pixmap);
-
-    restore_pixmap = screen->GetWindowPixmap(window->parent);
-    if (!restore_pixmap)
-        return;
 
     /* Update the window pixmap with the current flip pixmap contents */
     present_copy_region(&restore_pixmap->drawable, flip_pixmap, NULL, 0, 0);
@@ -132,7 +147,10 @@ present_wnmd_restore_window_pixmap(WindowPtr window)
     /* Switch back to using the original window pixmap now to avoid
      * 2D applications drawing to the wrong pixmap.
      */
-    present_set_tree_pixmap(window, flip_pixmap, restore_pixmap);
+    present_set_tree_pixmap(toplvl, flip_pixmap, restore_pixmap);
+
+    toplvl_priv->flip_window = NULL;
+    window_priv->restore_pixmap = NULL;
 }
 
 void
@@ -247,6 +265,7 @@ present_wnmd_check_flip(RRCrtcPtr    crtc,
 {
     ScreenPtr               screen = window->drawable.pScreen;
     present_screen_priv_ptr screen_priv = present_screen_priv(screen);
+    WindowPtr               toplvl_window = present_wnmd_toplvl_flip_window(window);
 
     if (!screen_priv)
         return FALSE;
@@ -275,8 +294,13 @@ present_wnmd_check_flip(RRCrtcPtr    crtc,
 
     // TODO: Check for valid region?
 
+    /* Flip pixmap must have same dimensions as window */
     if (window->drawable.width != pixmap->drawable.width ||
             window->drawable.height != pixmap->drawable.height)
+        return FALSE;
+
+    /* Window must be same region as toplevel window */
+    if ( !RegionEqual(&window->winSize, &toplvl_window->winSize) )
         return FALSE;
 
     /* Ask the driver for permission */
@@ -347,11 +371,22 @@ present_wnmd_flip(WindowPtr window,
     return (*screen_priv->wnmd_info->flip) (window, crtc, event_id, target_msc, pixmap, sync_flip);
 }
 
+static void
+present_wnmd_cancel_flip(WindowPtr window)
+{
+    present_window_priv_ptr window_priv = present_window_priv(window);
+
+    if (window_priv->flip_pending)
+        present_wnmd_set_abort_flip(window);
+    else if (!window_priv->unflip_event_id && window_priv->flip_active)
+        present_wnmd_unflip(window);
+}
+
 /*
  * Once the required MSC has been reached, execute the pending request.
  *
  * For requests to actually present something, either blt contents to
- * the window pixmap or queue a frame buffer swap.
+ * the window pixmap or queue a window buffer swap on the backend.
  *
  * For requests to just get the current MSC/UST combo, skip that part and
  * go straight to event delivery.
@@ -361,6 +396,7 @@ static void
 present_wnmd_execute(present_vblank_ptr vblank, uint64_t ust, uint64_t crtc_msc)
 {
     WindowPtr               window = vblank->window;
+    ScreenPtr               screen = window->drawable.pScreen;
     present_window_priv_ptr window_priv = present_window_priv(window);
 
     if (present_execute_wait(vblank, crtc_msc))
@@ -395,18 +431,29 @@ present_wnmd_execute(present_vblank_ptr vblank, uint64_t ust, uint64_t crtc_msc)
              */
             xorg_list_add(&vblank->event_queue, &window_priv->flip_queue);
 
-            /* Try to flip
+            /* Try to flip - the vblank is now pending
              */
             window_priv->flip_pending = vblank;
-
+            // ask the driver
             if (present_wnmd_flip(vblank->window, vblank->crtc, vblank->event_id,
                                      vblank->target_msc, vblank->pixmap, vblank->sync_flip)) {
+
+                WindowPtr toplvl = present_wnmd_toplvl_flip_window(window);
+                present_window_priv_ptr toplvl_priv = present_get_window_priv(toplvl, TRUE);
+
                 /* Fix window pixmaps:
-                 *  1) Needs to restore pixmap from now on
-                 *  2) Set current flip window pixmap to the new pixmap
+                 *  1) Remove flips for possible other flip windows associated with the same toplevel window,
+                 *     since we currently only support one flip window per toplevel
+                 *  2) Remember restore pixmap
+                 *  3) Set current flip window pixmap to the new pixmap
                  */
-                window_priv->restore_pixmap = TRUE;
-                present_set_tree_pixmap(vblank->window, NULL, vblank->pixmap);
+                if (toplvl_priv->flip_window != window)
+                    present_wnmd_cancel_flip(toplvl_priv->flip_window);
+
+                if(!window_priv->restore_pixmap)
+                    window_priv->restore_pixmap = (*screen->GetWindowPixmap)(window);
+
+                present_set_tree_pixmap(toplvl, NULL, vblank->pixmap);
 
                 /* Report update region as damaged
                  */
@@ -428,10 +475,7 @@ present_wnmd_execute(present_vblank_ptr vblank, uint64_t ust, uint64_t crtc_msc)
         }
         DebugPresent(("\tc %p %8lld: %08lx -> %08lx\n", vblank, crtc_msc, vblank->pixmap->drawable.id, vblank->window->drawable.id));
 
-        if (window_priv->flip_pending)
-            present_wnmd_set_abort_flip(window);
-        else if (!window_priv->unflip_event_id && window_priv->flip_active)
-            present_wnmd_unflip(window);
+        present_wnmd_cancel_flip(window);
 
         present_execute_copy(vblank, crtc_msc);
 
