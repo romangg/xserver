@@ -391,7 +391,6 @@ present_wnmd_cancel_flip(WindowPtr window)
  * For requests to just get the current MSC/UST combo, skip that part and
  * go straight to event delivery.
  */
-
 static void
 present_wnmd_execute(present_vblank_ptr vblank, uint64_t ust, uint64_t crtc_msc)
 {
