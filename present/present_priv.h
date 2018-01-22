@@ -216,7 +216,7 @@ struct present_window_priv {
     struct xorg_list       vblank;
     struct xorg_list       notifies;
 
-    /* Used in window flip mode (wnmd) */
+    /* Used for window flips */
     uint64_t               event_id;
     struct xorg_list       exec_queue;
     struct xorg_list       flip_queue;
@@ -225,7 +225,9 @@ struct present_window_priv {
     present_vblank_ptr     flip_pending;
     present_vblank_ptr     flip_active;
     uint64_t               unflip_event_id;
-    Bool                   restore_pixmap;
+
+    WindowPtr              flip_window;
+    PixmapPtr              restore_pixmap;
 };
 
 #define PresentCrtcNeverSet     ((RRCrtcPtr) 1)
