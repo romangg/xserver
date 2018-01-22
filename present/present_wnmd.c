@@ -238,12 +238,12 @@ present_wnmd_event_notify(WindowPtr window, uint64_t event_id, uint64_t ust, uin
 
 static Bool
 present_wnmd_check_flip(RRCrtcPtr    crtc,
-                           WindowPtr    window,
-                           PixmapPtr    pixmap,
-                           Bool         sync_flip,
-                           RegionPtr    valid,
-                           int16_t      x_off,
-                           int16_t      y_off)
+                        WindowPtr    window,
+                        PixmapPtr    pixmap,
+                        Bool         sync_flip,
+                        RegionPtr    valid,
+                        int16_t      x_off,
+                        int16_t      y_off)
 {
     ScreenPtr               screen = window->drawable.pScreen;
     present_screen_priv_ptr screen_priv = present_screen_priv(screen);
@@ -335,11 +335,11 @@ present_wnmd_check_flip_window (WindowPtr window)
 
 static Bool
 present_wnmd_flip(WindowPtr window,
-                     RRCrtcPtr crtc,
-                     uint64_t event_id,
-                     uint64_t target_msc,
-                     PixmapPtr pixmap,
-                     Bool sync_flip)
+                  RRCrtcPtr crtc,
+                  uint64_t event_id,
+                  uint64_t target_msc,
+                  PixmapPtr pixmap,
+                  Bool sync_flip)
 {
     ScreenPtr                   screen = crtc->pScreen;
     present_screen_priv_ptr     screen_priv = present_screen_priv(screen);
