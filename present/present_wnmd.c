@@ -447,7 +447,7 @@ present_wnmd_execute(present_vblank_ptr vblank, uint64_t ust, uint64_t crtc_msc)
                  *  2) Remember restore pixmap
                  *  3) Set current flip window pixmap to the new pixmap
                  */
-                if (toplvl_priv->flip_window != window)
+                if (toplvl_priv->flip_window && toplvl_priv->flip_window != window)
                     present_wnmd_cancel_flip(toplvl_priv->flip_window);
                 toplvl_priv->flip_window = window;
 
