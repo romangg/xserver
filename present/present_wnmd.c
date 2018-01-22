@@ -605,8 +605,6 @@ present_wnmd_abort_vblank(ScreenPtr screen, WindowPtr window, RRCrtcPtr crtc, ui
             vblank->queued = FALSE;
             return;
         }
-        if (match < 0)
-            break;
     }
     xorg_list_for_each_entry(vblank, &window_priv->flip_queue, event_queue) {
         if (vblank->event_id == event_id) {
