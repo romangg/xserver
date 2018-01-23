@@ -105,6 +105,16 @@ struct xwl_screen {
     Atom allow_commits_prop;
 };
 
+struct xwl_present_event {
+    uint64_t event_id;
+    uint64_t target_msc;
+
+    struct xwl_window *xwl_window;
+    struct wl_buffer *buffer;
+
+    struct xorg_list list;
+};
+
 struct xwl_window {
     struct xwl_screen *xwl_screen;
     struct wl_surface *surface;
@@ -121,19 +131,12 @@ struct xwl_window {
     WindowPtr present_window;
     struct wl_surface *present_surface;
     uint64_t present_msc;
+
+    struct xwl_present_event *present_flip_pending;
     struct wl_callback *present_frame_callback;
+    struct wl_callback *present_sync_callback;
     struct xorg_list present_event_list;
     struct xorg_list present_release_queue;
-};
-
-struct xwl_present_event {
-    uint64_t event_id;
-    uint64_t target_msc;
-
-    struct xwl_window *xwl_window;
-    struct wl_buffer *buffer;
-
-    struct xorg_list list;
 };
 
 #define MODIFIER_META 0x01
