@@ -117,7 +117,7 @@ present_wnmd_toplvl_flip_window(WindowPtr window)
 
     while(w->parent) {
         next_w = w->parent;
-        if (next_w->drawable.id != pixmap->drawable.id) {
+        if ( (*screen->GetWindowPixmap)(next_w) != pixmap) {
             break;
         }
         w = next_w;
@@ -449,6 +449,7 @@ present_wnmd_execute(present_vblank_ptr vblank, uint64_t ust, uint64_t crtc_msc)
                  */
                 if (toplvl_priv->flip_window != window)
                     present_wnmd_cancel_flip(toplvl_priv->flip_window);
+                toplvl_priv->flip_window = window;
 
                 if(!window_priv->restore_pixmap)
                     window_priv->restore_pixmap = (*screen->GetWindowPixmap)(window);
