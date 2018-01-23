@@ -197,6 +197,8 @@ present_pixmap(WindowPtr window,
     ScreenPtr                   screen = window->drawable.pScreen;
     present_screen_priv_ptr     screen_priv = present_screen_priv(screen);
 
+    ErrorF("STAAART\n");
+
     return screen_priv->present_pixmap(window,
                                        pixmap,
                                        client,

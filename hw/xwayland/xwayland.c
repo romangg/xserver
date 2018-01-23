@@ -712,6 +712,12 @@ registry_global(void *data, struct wl_registry *registry, uint32_t id,
         xwl_screen->shell =
             wl_registry_bind(registry, id, &wl_shell_interface, 1);
     }
+    else if (strcmp(interface, "wp_presentation") == 0) {
+        xwl_screen->presentation =
+            wl_registry_bind(xwl_screen->registry, id,
+                             &wp_presentation_interface,
+                             1);
+    }
     else if (strcmp(interface, "wl_output") == 0 && version >= 2) {
         if (xwl_output_create(xwl_screen, id))
             xwl_screen->expecting_event++;
@@ -1017,7 +1023,7 @@ xwl_screen_init(ScreenPtr pScreen, int argc, char **argv)
     }
 #endif
 
-    if (xwl_screen->glamor && xwl_screen->rootless)
+    if (xwl_screen->glamor && xwl_screen->rootless && xwl_screen->presentation)
         xwl_screen->present = xwl_present_init(pScreen);
 
     if (!xwl_screen->glamor) {

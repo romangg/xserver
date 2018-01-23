@@ -42,6 +42,7 @@
 #include <randrstr.h>
 #include <exevents.h>
 
+#include "presentation-time-client-protocol.h"
 #include "relative-pointer-unstable-v1-client-protocol.h"
 #include "pointer-constraints-unstable-v1-client-protocol.h"
 #include "tablet-unstable-v2-client-protocol.h"
@@ -80,6 +81,7 @@ struct xwl_screen {
     struct zwp_tablet_manager_v2 *tablet_manager;
     struct wl_shm *shm;
     struct wl_shell *shell;
+    struct wp_presentation_time *presentation;
     struct zwp_relative_pointer_manager_v1 *relative_pointer_manager;
     struct zwp_pointer_constraints_v1 *pointer_constraints;
     struct zwp_xwayland_keyboard_grab_manager_v1 *wp_grab;
