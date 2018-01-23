@@ -696,6 +696,18 @@ xwl_screen_post_damage(struct xwl_screen *xwl_screen)
 }
 
 static void
+presentation_handle_clock_id(void *data,
+                             struct wp_presentation *wp_presentation,
+                             uint32_t clk_id)
+{
+    ErrorF("XXX presentation_handle_clock_id\n");
+}
+
+static const struct wp_presentation_listener presentation_listener = {
+    presentation_handle_clock_id
+};
+
+static void
 registry_global(void *data, struct wl_registry *registry, uint32_t id,
                 const char *interface, uint32_t version)
 {
@@ -717,6 +729,7 @@ registry_global(void *data, struct wl_registry *registry, uint32_t id,
             wl_registry_bind(xwl_screen->registry, id,
                              &wp_presentation_interface,
                              1);
+        wp_presentation_add_listener(xwl_screen->presentation, &presentation_listener, xwl_screen);
     }
     else if (strcmp(interface, "wl_output") == 0 && version >= 2) {
         if (xwl_output_create(xwl_screen, id))
