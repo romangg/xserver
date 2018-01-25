@@ -472,6 +472,11 @@ present_wnmd_execute(present_vblank_ptr vblank, uint64_t ust, uint64_t crtc_msc)
                     window_priv->restore_pixmap->refcnt++;
                 }
 
+                ErrorF("PP present_wnmd_execute X: %d, %d\n", window->drawable.x, vblank->pixmap->drawable.x);
+
+                vblank->pixmap->drawable.x = window->drawable.x;
+                vblank->pixmap->drawable.y = window->drawable.y;
+
                 present_set_tree_pixmap(toplvl, NULL, vblank->pixmap);
 
                 /* Report update region as damaged
