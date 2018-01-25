@@ -375,10 +375,10 @@ xwl_present_flip(WindowPtr present_window,
         wl_callback_add_listener(xwl_window->present_frame_callback, &present_frame_listener, xwl_window);
     }
 
+    ErrorF("ZZZ2 X %d, %d | %d\n", present_box->x1, present_box->x2, present_box->x2 - present_box->x1);
+    ErrorF("ZZZ2 Y %d, %d | %d\n", present_box->y1, present_box->y2, present_box->y2 - present_box->y1);
 
-    ErrorF("ZZZ2 %d\n", present_box->x2 - present_box->x1);
-
-    wl_surface_damage(xwl_window->present_surface, present_box->x1, present_box->y1,
+    wl_surface_damage(xwl_window->present_surface, 0, 0,
                       present_box->x2 - present_box->x1, present_box->y2 - present_box->y1);
 
     wl_surface_commit(xwl_window->present_surface);
