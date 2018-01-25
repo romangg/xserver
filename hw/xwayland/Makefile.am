@@ -53,8 +53,6 @@ Xwayland_DEPENDENCIES = $(glamor_lib) $(XWAYLAND_LIBS)
 endif
 
 Xwayland_built_sources +=					\
-	presentation-time-client-protocol.h			\
-	presentation-time-client-protocol.c			\
 	relative-pointer-unstable-v1-client-protocol.h		\
 	relative-pointer-unstable-v1-protocol.c			\
 	pointer-constraints-unstable-v1-client-protocol.h	\
@@ -74,11 +72,6 @@ $(Xwayland_SOURCES): $(Xwayland_built_sources)
 
 relink:
 	$(AM_V_at)rm -f Xwayland$(EXEEXT) && $(MAKE) Xwayland$(EXEEXT)
-
-presentation-time-client-protocol.c : $(WAYLAND_PROTOCOLS_DATADIR)/stable/presentation-time/presentation-time.xml
-	$(AM_V_GEN)$(WAYLAND_SCANNER) code < $< > $@
-presentation-time-client-protocol.h : $(WAYLAND_PROTOCOLS_DATADIR)/stable/presentation-time/presentation-time.xml
-	$(AM_V_GEN)$(WAYLAND_SCANNER) client-header < $< > $@
 
 relative-pointer-unstable-v1-protocol.c : $(WAYLAND_PROTOCOLS_DATADIR)/unstable/relative-pointer/relative-pointer-unstable-v1.xml
 	$(AM_V_GEN)$(WAYLAND_SCANNER) code < $< > $@
