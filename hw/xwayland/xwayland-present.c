@@ -27,7 +27,7 @@
 
 #include <present.h>
 
-#define FRAME_TIMER_IVAL 34 // ~ 30fps
+#define FRAME_TIMER_IVAL 67 // ~15fps
 
 static struct xorg_list xwl_present_windows;
 
