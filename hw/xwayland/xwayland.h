@@ -36,6 +36,7 @@
 
 #include <X11/X.h>
 
+#include <os.h>
 #include <fb.h>
 #include <input.h>
 #include <dix.h>
@@ -136,6 +137,8 @@ struct xwl_window {
     struct wl_surface *present_surface;
     uint64_t present_msc;
 
+    Bool present_frame_timer_firing;
+    OsTimerPtr present_frame_timer;
     struct wl_callback *present_frame_callback;
     struct wl_callback *present_sync_callback;
     struct xorg_list present_event_list;

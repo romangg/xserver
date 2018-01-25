@@ -27,6 +27,8 @@
 
 #include <present.h>
 
+#define FRAME_TIMER_IVAL 34 // ~ 30fps
+
 static struct xorg_list xwl_present_windows;
 
 void
@@ -64,8 +66,12 @@ xwl_present_cleanup(WindowPtr window)
 
     /* Reset base data */
     xorg_list_del(&xwl_window->present_link);
+
     xwl_window->present_surface = NULL;
     xwl_window->present_window = NULL;
+
+    TimerFree(xwl_window->present_frame_timer);
+    xwl_window->present_frame_timer = NULL;
 
     /* Clear remaining events */
     xorg_list_for_each_entry_safe(event, tmp, &xwl_window->present_event_list, list) {
@@ -153,8 +159,17 @@ present_frame_callback(void *data,
 
     ErrorF("XX present_frame_callback MSC: %d\n", xwl_window->present_msc);
 
+    /* we do not need the timer anymore for this frame */
+    TimerCancel(xwl_window->present_frame_timer);
+
     wl_callback_destroy(xwl_window->present_frame_callback);
     xwl_window->present_frame_callback = NULL;
+
+    if (xwl_window->present_frame_timer_firing) {
+        /* If the timer was firing, this frame callback is too late */
+        xwl_window->present_frame_timer_firing = FALSE;
+        return;
+    }
 
     xwl_window->present_msc++;
     xwl_present_events_notify(xwl_window);
@@ -163,6 +178,24 @@ present_frame_callback(void *data,
 static const struct wl_callback_listener present_frame_listener = {
     present_frame_callback
 };
+
+static CARD32
+present_frame_timer_callback(OsTimerPtr timer,
+                             CARD32 time,
+                             void *arg)
+{
+    struct xwl_window *xwl_window = arg;
+
+    ErrorF("XX present_frame_timer_callback MSC: %d\n", xwl_window->present_msc);
+    ErrorF("XX present_frame_timer_callback PRESENT_FRAME_CALLBACK: %d\n", xwl_window->present_frame_callback);
+
+    xwl_window->present_frame_timer_firing = TRUE;
+
+    xwl_window->present_msc++;
+    xwl_present_events_notify(xwl_window);
+
+    return FRAME_TIMER_IVAL;
+}
 
 static void
 xwl_present_sync_callback(void *data,
@@ -371,6 +404,8 @@ xwl_present_flip(WindowPtr present_window,
     ErrorF("ZZ xwl_present_flip PRESENT_FRAME_CALLBACK %d\n", xwl_window->present_frame_callback);
 
     if (!xwl_window->present_frame_callback) {
+        xwl_window->present_frame_timer = TimerSet(xwl_window->present_frame_timer, 0, FRAME_TIMER_IVAL, &present_frame_timer_callback, xwl_window);
+
         xwl_window->present_frame_callback = wl_surface_frame(xwl_window->present_surface);
         wl_callback_add_listener(xwl_window->present_frame_callback, &present_frame_listener, xwl_window);
     }
@@ -391,7 +426,6 @@ xwl_present_flip(WindowPtr present_window,
     wl_display_flush(xwl_window->xwl_screen->display);
 
     ErrorF("ZZ xwl_present_flip END\n");
-
 
     return TRUE;
 }
