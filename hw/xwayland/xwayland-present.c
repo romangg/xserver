@@ -27,7 +27,7 @@
 
 #include <present.h>
 
-#define FRAME_TIMER_IVAL 67 // ~15fps
+#define FRAME_TIMER_IVAL 33 // ~30fps
 
 static struct xorg_list xwl_present_windows;
 
@@ -255,6 +255,18 @@ xwl_present_get_ust_msc(WindowPtr present_window, uint64_t *ust, uint64_t *msc)
     return Success;
 }
 
+static void
+xwl_present_reset_present_window(struct xwl_window *xwl_window, WindowPtr present_window)
+{
+    /* We always switch to another child window, if it wants to present. */
+    if (xwl_window->present_window != present_window) {
+        if (xwl_window->present_window)
+            xwl_present_cleanup(xwl_window->present_window);
+        xwl_window->present_window = present_window;
+        xorg_list_add(&xwl_window->present_link, &xwl_present_windows);
+    }
+}
+
 /*
  * Queue an event to report back to the Present extension when the specified
  * MSC has past
@@ -265,16 +277,38 @@ xwl_present_queue_vblank(WindowPtr present_window,
                          uint64_t event_id,
                          uint64_t msc)
 {
-    /*
-     * Queuing events doesn't work yet: There needs to be a Wayland protocol
-     * extension infroming clients about timings.
-     *
-     * See for a proposal for that:
-     * https://cgit.freedesktop.org/wayland/wayland-protocols/tree/stable/presentation-time
-     *
-     */
-    return BadRequest;
-    /* */
+    struct xwl_window *xwl_window = xwl_window_of_top(present_window);
+    struct xwl_present_event *event;
+
+    if (!xwl_window)
+        return BadAlloc;
+
+    if (xwl_window->present_crtc_fake != crtc)
+        return BadRequest;
+
+    event = malloc(sizeof *event);
+    if (!event)
+        return BadAlloc;
+
+    xwl_present_reset_present_window(xwl_window, present_window);
+
+    event->event_id = event_id;
+    event->xwl_window = xwl_window;
+    event->buffer = NULL;
+    event->target_msc = msc;
+    event->pending = FALSE;
+    event->abort = FALSE;
+
+    xorg_list_add(&event->list, &xwl_window->present_event_list);
+
+    if (!xwl_window->present_frame_callback && !xwl_window->present_frame_timer_firing)
+        xwl_window->present_frame_timer = TimerSet(xwl_window->present_frame_timer,
+                                                   0,
+                                                   FRAME_TIMER_IVAL,
+                                                   &present_frame_timer_callback,
+                                                   xwl_window);
+
+    return Success;
 }
 
 /*
@@ -284,12 +318,21 @@ xwl_present_queue_vblank(WindowPtr present_window,
 static void
 xwl_present_abort_vblank(WindowPtr present_window, RRCrtcPtr crtc, uint64_t event_id, uint64_t msc)
 {
-    struct xwl_window *xwl_window = xwl_window_of_top(present_window);
+    struct xwl_window *xwl_window;
     struct xwl_present_event *event, *tmp;
+
+    if (!present_window)
+        return;
+
+    xwl_window = xwl_window_of_top(present_window);
+
+    if (!xwl_window || !crtc || xwl_window->present_crtc_fake != crtc)
+        return;
 
     ErrorF("XX xwl_present_abort_vblank EVENT %d\n", event_id);
 
     xorg_list_for_each_entry_safe(event, tmp, &xwl_window->present_event_list, list) {
+        ErrorF("XX xwl_present_abort_vblank present_event_list %d\n", event->event_id);
         if (event->event_id == event_id) {
             xorg_list_del(&event->list);
             free(event);
@@ -298,6 +341,7 @@ xwl_present_abort_vblank(WindowPtr present_window, RRCrtcPtr crtc, uint64_t even
     }
 
     xorg_list_for_each_entry(event, &xwl_window->present_release_queue, list) {
+        ErrorF("XX xwl_present_abort_vblank present_release_queue %d\n", event->event_id);
         if (event->event_id == event_id) {
             event->abort = TRUE;
             break;
@@ -361,16 +405,10 @@ xwl_present_flip(WindowPtr present_window,
 
     ErrorF("ZZ xwl_present_flip START %d\n");
 
-    /* We always switch to another child window, if it wants to present. */
-    if (xwl_window->present_window != present_window) {
-        if (xwl_window->present_window)
-            xwl_present_cleanup(xwl_window->present_window);
-        xwl_window->present_window = present_window;
-        xorg_list_add(&xwl_window->present_link, &xwl_present_windows);
-
-        /* We can flip directly to the main surface (full screen window without clips) */
-        xwl_window->present_surface = xwl_window->surface;
-    }
+    /* Potentially reset the presenting window */
+    xwl_present_reset_present_window(xwl_window, present_window);
+    /* We can flip directly to the main surface (full screen window without clips) */
+    xwl_window->present_surface = xwl_window->surface;
 
     event = malloc(sizeof *event);
     if (!event) {
