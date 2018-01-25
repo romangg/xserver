@@ -110,6 +110,8 @@ struct xwl_screen {
 struct xwl_present_event {
     uint64_t event_id;
     uint64_t target_msc;
+    Bool abort;
+    Bool pending;
 
     struct xwl_window *xwl_window;
     struct wl_buffer *buffer;
@@ -134,7 +136,6 @@ struct xwl_window {
     struct wl_surface *present_surface;
     uint64_t present_msc;
 
-    struct xwl_present_event *present_flip_pending;
     struct wl_callback *present_frame_callback;
     struct wl_callback *present_sync_callback;
     struct xorg_list present_event_list;

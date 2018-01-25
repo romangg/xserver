@@ -1036,7 +1036,7 @@ xwl_screen_init(ScreenPtr pScreen, int argc, char **argv)
     }
 #endif
 
-    if (xwl_screen->glamor && xwl_screen->rootless && xwl_screen->presentation)
+    if (xwl_screen->glamor && xwl_screen->rootless /*&& xwl_screen->presentation*/)
         xwl_screen->present = xwl_present_init(pScreen);
 
     if (!xwl_screen->glamor) {

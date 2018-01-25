@@ -33,6 +33,7 @@ static void
 present_wnmd_create_event_id(present_window_priv_ptr window_priv, present_vblank_ptr vblank)
 {
     vblank->event_id = ++window_priv->event_id;
+    ErrorF("PP present_wnmd_create_event_id %d\n", vblank->event_id);
 }
 
 static uint32_t
@@ -149,6 +150,8 @@ present_wnmd_restore_window_pixmap(WindowPtr window)
      */
     present_set_tree_pixmap(toplvl, flip_pixmap, restore_pixmap);
 
+    window_priv->restore_pixmap--;
+
     toplvl_priv->flip_window = NULL;
     window_priv->restore_pixmap = NULL;
 }
@@ -186,6 +189,8 @@ present_wnmd_flip_notify(present_vblank_ptr vblank, uint64_t ust, uint64_t crtc_
     WindowPtr                   window = vblank->window;
     present_window_priv_ptr     window_priv = present_window_priv(window);
 
+    ErrorF("PP present_wnmd_flip_notify flip_pending %d\n", window_priv->flip_pending->event_id);
+
     DebugPresent(("\tn %lld %p %8lld: %08lx -> %08lx\n",
                   vblank->event_id, vblank, vblank->target_msc,
                   vblank->pixmap ? vblank->pixmap->drawable.id : 0,
@@ -215,6 +220,8 @@ present_wnmd_event_notify(WindowPtr window, uint64_t event_id, uint64_t ust, uin
     present_window_priv_ptr     window_priv = present_window_priv(window);
     present_vblank_ptr          vblank;
 
+    ErrorF("PP present_wnmd_event_notify %d\n", event_id);
+
     if (!window_priv)
         return;
     if (!event_id)
@@ -222,13 +229,16 @@ present_wnmd_event_notify(WindowPtr window, uint64_t event_id, uint64_t ust, uin
 
     DebugPresent(("\te %lld ust %lld msc %lld\n", event_id, ust, msc));
     xorg_list_for_each_entry(vblank, &window_priv->exec_queue, event_queue) {
+        ErrorF("PP present_wnmd_event_notify exec_queue %d\n", vblank->event_id);
         if (event_id == vblank->event_id) {
             present_wnmd_execute(vblank, ust, msc);
             return;
         }
     }
     xorg_list_for_each_entry(vblank, &window_priv->flip_queue, event_queue) {
+        ErrorF("PP present_wnmd_event_notify flip_queue %d\n", vblank->event_id);
         if (vblank->event_id == event_id) {
+            ErrorF("PP present_wnmd_event_notify flip_queue queued? %d\n", vblank->queued);
             if (vblank->queued) {
                 present_wnmd_execute(vblank, ust, msc);
             } else {
@@ -240,6 +250,7 @@ present_wnmd_event_notify(WindowPtr window, uint64_t event_id, uint64_t ust, uin
     }
 
     xorg_list_for_each_entry(vblank, &window_priv->idle_queue, event_queue) {
+        ErrorF("PP present_wnmd_event_notify idle_queue %d\n", vblank->event_id);
         if (vblank->event_id == event_id) {
             present_wnmd_free_idle_vblank(vblank);
             return;
@@ -398,8 +409,12 @@ present_wnmd_execute(present_vblank_ptr vblank, uint64_t ust, uint64_t crtc_msc)
     ScreenPtr               screen = window->drawable.pScreen;
     present_window_priv_ptr window_priv = present_window_priv(window);
 
+    ErrorF("PP present_wnmd_execute WINDOW: %d\n", window);
+
     if (present_execute_wait(vblank, crtc_msc))
         return;
+
+    ErrorF("PP present_wnmd_execute FLIP_PENDING | UNFLIP_EVENT_ID: %d | %d\n", window_priv->flip_pending, window_priv->unflip_event_id);
 
     if (vblank->flip && vblank->pixmap && vblank->window) {
         if (window_priv->flip_pending || window_priv->unflip_event_id) {
@@ -416,6 +431,8 @@ present_wnmd_execute(present_vblank_ptr vblank, uint64_t ust, uint64_t crtc_msc)
     xorg_list_del(&vblank->event_queue);
     xorg_list_del(&vblank->window_list);
     vblank->queued = FALSE;
+
+    ErrorF("PP present_wnmd_execute PIXMAP: %d\n", vblank->pixmap);
 
     if (vblank->pixmap && vblank->window) {
 
@@ -450,8 +467,10 @@ present_wnmd_execute(present_vblank_ptr vblank, uint64_t ust, uint64_t crtc_msc)
                     present_wnmd_cancel_flip(toplvl_priv->flip_window);
                 toplvl_priv->flip_window = window;
 
-                if(!window_priv->restore_pixmap)
+                if (!window_priv->restore_pixmap) {
                     window_priv->restore_pixmap = (*screen->GetWindowPixmap)(window);
+                    window_priv->restore_pixmap->refcnt++;
+                }
 
                 present_set_tree_pixmap(toplvl, NULL, vblank->pixmap);
 
@@ -643,8 +662,7 @@ present_wnmd_abort_vblank(ScreenPtr screen, WindowPtr window, RRCrtcPtr crtc, ui
     (*screen_priv->wnmd_info->abort_vblank) (window, crtc, event_id, msc);
 
     xorg_list_for_each_entry(vblank, &window_priv->exec_queue, event_queue) {
-        int64_t match = event_id - vblank->event_id;
-        if (match == 0) {
+        if (vblank->event_id == event_id) {
             xorg_list_del(&vblank->event_queue);
             vblank->queued = FALSE;
             return;

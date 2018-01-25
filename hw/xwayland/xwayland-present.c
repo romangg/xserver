@@ -35,8 +35,12 @@ xwl_present_cleanup(WindowPtr window)
     struct xwl_window           *xwl_window = xwl_window_of_top(window);
     struct xwl_present_event    *event, *tmp;
 
+    ErrorF("CC xwl_present_cleanup XWL_WINDOW %d\n", xwl_window);
+
     if (!xwl_window)
         return;
+
+    ErrorF("CC xwl_present_cleanup PRESENT_WINDOW %d\n", xwl_window->present_window);
 
     if (!xwl_window->present_window)
         return;
@@ -73,7 +77,10 @@ xwl_present_cleanup(WindowPtr window)
     xorg_list_for_each_entry_safe(event, tmp, &xwl_window->present_release_queue, list) {
         present_wnmd_event_notify(xwl_window->window, event->event_id, 0, xwl_window->present_msc);
         xorg_list_del(&event->list);
-        free(event);
+        if (event->pending)
+            event->abort = TRUE;
+        else
+            free(event);
     }
 }
 
@@ -85,6 +92,9 @@ buffer_release(void *data, struct wl_buffer *buffer)
     struct xwl_present_event    *event, *tmp;
     Bool                        found_window = FALSE;
 
+
+    ErrorF("YYY buffer_release BUFFER %d\n", buffer);
+
     /* Find window */
     xorg_list_for_each_entry(xwl_window, &xwl_present_windows, present_link) {
         if (xwl_window->present_window == present_window) {
@@ -93,14 +103,22 @@ buffer_release(void *data, struct wl_buffer *buffer)
         }
     }
 
+    ErrorF("YYY buffer_release FOUND_WINDOW %d\n", found_window);
+
     if (!found_window)
         return;
 
     xorg_list_for_each_entry_safe(event, tmp, &xwl_window->present_release_queue, list) {
+        ErrorF("Y buffer_release EVENT %d | %d\n", event->event_id, event->buffer);
         if (event->buffer == buffer) {
-            present_wnmd_event_notify(present_window, event->event_id, 0, xwl_window->present_msc);
-            xorg_list_del(&event->list);
-            free(event);
+            if (!event->abort)
+                present_wnmd_event_notify(present_window, event->event_id, 0, xwl_window->present_msc);
+            event->abort = TRUE;
+
+            if (!event->pending) {
+                xorg_list_del(&event->list);
+                free(event);
+            }
             break;
         }
     }
@@ -117,6 +135,7 @@ xwl_present_events_notify(struct xwl_window *xwl_window)
     struct xwl_present_event    *event, *tmp;
 
     xorg_list_for_each_entry_safe(event, tmp, &xwl_window->present_event_list, list) {
+        ErrorF("NNN xwl_present_events_notify MSCs: %d | %d\n", event->target_msc, msc);
         if (event->target_msc <= msc) {
             present_wnmd_event_notify(xwl_window->present_window, event->event_id, 0, msc);
             xorg_list_del(&event->list);
@@ -132,13 +151,12 @@ present_frame_callback(void *data,
 {
     struct xwl_window *xwl_window = data;
 
-    ErrorF("VV FRAME %d\n", xwl_window->present_msc);
+    ErrorF("XX present_frame_callback MSC: %d\n", xwl_window->present_msc);
 
     wl_callback_destroy(xwl_window->present_frame_callback);
     xwl_window->present_frame_callback = NULL;
 
     xwl_window->present_msc++;
-
     xwl_present_events_notify(xwl_window);
 }
 
@@ -151,16 +169,32 @@ xwl_present_sync_callback(void *data,
                struct wl_callback *callback,
                uint32_t time)
 {
-    struct xwl_window *xwl_window = data;
+    struct xwl_present_event *event = data;
+    struct xwl_window *xwl_window = event->xwl_window;
 
-    ErrorF("VV SYNC %d\n", xwl_window->present_msc);
+    ErrorF("XX xwl_present_sync_callback MSC %d\n", xwl_window->present_msc);
+    ErrorF("XX xwl_present_sync_callback 1. EVENT_ID %d\n", event->event_id);
+    ErrorF("XX xwl_present_sync_callback ABORT %d\n", event->abort);
 
-    // might have been aborted
-    if (xwl_window->present_flip_pending)
-        present_wnmd_event_notify(xwl_window->present_window, xwl_window->present_flip_pending->event_id, 0, xwl_window->present_msc);
+    event->pending = FALSE;
+
+    // event might have been aborted
+    if (event->abort) {
+        xorg_list_del(&event->list);
+        free(event);
+    } else {
+        ErrorF("XX xwl_present_sync_callback 2. EVENT_ID %d\n", event->event_id);
+
+        present_wnmd_event_notify(xwl_window->present_window,
+                                  event->event_id,
+                                  0,
+                                  xwl_window->present_msc);
+    }
+
+
+    ErrorF("XX xwl_present_sync_callback END!\n");
 
     xwl_window->present_sync_callback = NULL;
-    xwl_window->present_flip_pending = NULL;
 }
 
 static const struct wl_callback_listener xwl_present_sync_listener = {
@@ -221,15 +255,20 @@ xwl_present_abort_vblank(WindowPtr present_window, RRCrtcPtr crtc, uint64_t even
     struct xwl_window *xwl_window = xwl_window_of_top(present_window);
     struct xwl_present_event *event, *tmp;
 
-    assert (xwl_window->present_flip_pending && xwl_window->present_flip_pending->event_id == event_id);
-
-    xwl_window->present_flip_pending = NULL;
+    ErrorF("XX xwl_present_abort_vblank WINDOW %d\n", xwl_window->window);
 
     xorg_list_for_each_entry_safe(event, tmp, &xwl_window->present_event_list, list) {
         if (event->event_id == event_id) {
             xorg_list_del(&event->list);
             free(event);
             return;
+        }
+    }
+
+    xorg_list_for_each_entry(event, &xwl_window->present_release_queue, list) {
+        if (event->event_id == event_id) {
+            event->abort = TRUE;
+            break;
         }
     }
 }
@@ -249,11 +288,17 @@ xwl_present_check_flip(RRCrtcPtr crtc,
 {
     struct xwl_window *xwl_window = xwl_window_of_top(present_window);
 
+    ErrorF("XX xwl_present_check_flip XWL_WINDOW %d\n", xwl_window);
+
     if (!xwl_window)
         return FALSE;
+
+    ErrorF("XX xwl_present_check_flip PRESENT_WINDOW %d\n", xwl_window->present_window);
+
     if (!xwl_window->present_crtc_fake)
         return FALSE;
-    /* Make sure the client doesn't try to flip to another crtc
+    /*
+     * Make sure the client doesn't try to flip to another crtc
      * than the one created for 'xwl_window'
      */
     if (xwl_window->present_crtc_fake != crtc)
@@ -261,7 +306,7 @@ xwl_present_check_flip(RRCrtcPtr crtc,
     if (!RegionEqual(&xwl_window->window->winSize, &present_window->winSize))
         return FALSE;
 
-    ErrorF("XXX %d \n", xwl_window);
+    ErrorF("XX xwl_present_check_flip TRUE\n");
 
     return TRUE;
 }
@@ -282,6 +327,8 @@ xwl_present_flip(WindowPtr present_window,
 
     present_box = RegionExtents(&present_window->winSize);
 
+    ErrorF("ZZ xwl_present_flip START %d\n");
+
     /* We always switch to another child window, if it wants to present. */
     if (xwl_window->present_window != present_window) {
         if (xwl_window->present_window)
@@ -299,19 +346,19 @@ xwl_present_flip(WindowPtr present_window,
         return FALSE;
     }
 
-
-    ErrorF("ZZZ1\n");
-
     buffer = xwl_glamor_pixmap_get_wl_buffer(pixmap,
                                              present_box->x2 - present_box->x1,
                                              present_box->y2 - present_box->y1,
                                              &buffer_created);
 
+    ErrorF("ZZ xwl_present_flip BUFFER %d\n", buffer);
+
     event->event_id = event_id;
     event->xwl_window = xwl_window;
     event->buffer = buffer;
-
-    xwl_window->present_flip_pending = event;
+    event->target_msc = xwl_window->present_msc;
+    event->pending = TRUE;
+    event->abort = FALSE;
 
     xorg_list_add(&event->list, &xwl_window->present_release_queue);
 
@@ -321,6 +368,8 @@ xwl_present_flip(WindowPtr present_window,
     wl_buffer_set_user_data(buffer, present_window);
     wl_surface_attach(xwl_window->present_surface, buffer, 0, 0);
 
+    ErrorF("ZZ xwl_present_flip PRESENT_FRAME_CALLBACK %d\n", xwl_window->present_frame_callback);
+
     if (!xwl_window->present_frame_callback) {
         xwl_window->present_frame_callback = wl_surface_frame(xwl_window->present_surface);
         wl_callback_add_listener(xwl_window->present_frame_callback, &present_frame_listener, xwl_window);
@@ -329,54 +378,23 @@ xwl_present_flip(WindowPtr present_window,
 
     ErrorF("ZZZ2 %d\n", present_box->x2 - present_box->x1);
 
-//    //TODO
     wl_surface_damage(xwl_window->present_surface, present_box->x1, present_box->y1,
                       present_box->x2 - present_box->x1, present_box->y2 - present_box->y1);
 
     wl_surface_commit(xwl_window->present_surface);
 
-    ErrorF("VV START %d | %d\n", xwl_window->present_sync_callback, xwl_window->present_msc);
-
     xwl_window->present_sync_callback = wl_display_sync(xwl_window->xwl_screen->display);
-    wl_callback_add_listener(xwl_window->present_sync_callback, &xwl_present_sync_listener, xwl_window);
+    wl_callback_add_listener(xwl_window->present_sync_callback, &xwl_present_sync_listener, event);
+
+    ErrorF("ZZ xwl_present_flip MSC %d\n", xwl_window->present_msc);
 
     wl_display_flush(xwl_window->xwl_screen->display);
 
-//    present_wnmd_event_notify(present_window, event_id, 0, xwl_window->present_msc);
-//    //
-
+    ErrorF("ZZ xwl_present_flip END\n");
 
 
     return TRUE;
 }
-
-
-
-
-
-
-//static void
-//xwl_present_flip_executed(WindowPtr present_window, RRCrtcPtr crtc, uint64_t event_id, RegionPtr damage)
-//{
-//    struct xwl_window *xwl_window = xwl_window_of_top(present_window);
-//    BoxPtr box = RegionExtents(damage);
-
-
-//    ErrorF("ZZZ3\n");
-
-//    wl_surface_damage(xwl_window->present_surface, box->x1, box->y1,
-//                      box->x2 - box->x1, box->y2 - box->y1);
-
-//    wl_surface_commit(xwl_window->present_surface);
-//    wl_display_flush(xwl_window->xwl_screen->display);
-
-//    present_wnmd_event_notify(present_window, event_id, 0, xwl_window->present_msc);
-//}
-
-
-
-
-
 
 static void
 xwl_present_unflip(WindowPtr window, uint64_t event_id)
