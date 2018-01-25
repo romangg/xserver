@@ -106,6 +106,7 @@ present_vblank_create(WindowPtr window,
     vblank->msc_offset = window_priv->msc_offset;
     vblank->notifies = notifies;
     vblank->num_notifies = num_notifies;
+    vblank->flip_idler = FALSE;
 
     if (pixmap != NULL &&
         !(options & PresentOptionCopy) &&

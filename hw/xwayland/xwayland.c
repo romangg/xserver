@@ -780,7 +780,8 @@ xwl_dispatch_events (struct xwl_screen *xwl_screen)
     int ret = 0;
     int ready;
 
-    ErrorF("WW xwl_xwl_dispatch_events %d\n", xwl_screen->present);
+    ErrorF("WW xwl_xwl_dispatch_events1 %d\n", xwl_screen->present);
+    ErrorF("WW xwl_xwl_dispatch_events2 %d\n", xwl_screen->wait_flush);
 
     if (xwl_screen->wait_flush)
         goto pollout;
@@ -820,12 +821,15 @@ socket_handler(int fd, int ready, void *data)
 static void
 wakeup_handler(void *data, int err)
 {
+    ErrorF("WW wakeup_handle!\n");
 }
 
 static void
 block_handler(void *data, void *timeout)
 {
     struct xwl_screen *xwl_screen = data;
+
+    ErrorF("WW block_handler!\n");
 
     xwl_screen_post_damage(xwl_screen);
     xwl_dispatch_events (xwl_screen);
@@ -834,6 +838,8 @@ block_handler(void *data, void *timeout)
 void
 xwl_sync_events (struct xwl_screen *xwl_screen)
 {
+    ErrorF("WW xwl_sync_events!\n");
+
     xwl_dispatch_events (xwl_screen);
     xwl_read_events (xwl_screen);
 }

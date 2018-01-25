@@ -158,6 +158,7 @@ present_frame_callback(void *data,
     struct xwl_window *xwl_window = data;
 
     ErrorF("XX present_frame_callback MSC: %d\n", xwl_window->present_msc);
+    ErrorF("XX present_frame_callback FIRING1: %d\n", xwl_window->present_frame_timer_firing);
 
     /* we do not need the timer anymore for this frame */
     TimerCancel(xwl_window->present_frame_timer);
@@ -213,6 +214,7 @@ xwl_present_sync_callback(void *data,
 
     // event might have been aborted
     if (event->abort) {
+        ErrorF("XX xwl_present_sync_callback ABORT!\n");
         xorg_list_del(&event->list);
         free(event);
     } else {
@@ -224,10 +226,7 @@ xwl_present_sync_callback(void *data,
                                   xwl_window->present_msc);
     }
 
-
     ErrorF("XX xwl_present_sync_callback END!\n");
-
-    xwl_window->present_sync_callback = NULL;
 }
 
 static const struct wl_callback_listener xwl_present_sync_listener = {
@@ -288,7 +287,7 @@ xwl_present_abort_vblank(WindowPtr present_window, RRCrtcPtr crtc, uint64_t even
     struct xwl_window *xwl_window = xwl_window_of_top(present_window);
     struct xwl_present_event *event, *tmp;
 
-    ErrorF("XX xwl_present_abort_vblank WINDOW %d\n", xwl_window->window);
+    ErrorF("XX xwl_present_abort_vblank EVENT %d\n", event_id);
 
     xorg_list_for_each_entry_safe(event, tmp, &xwl_window->present_event_list, list) {
         if (event->event_id == event_id) {
@@ -425,6 +424,13 @@ xwl_present_flip(WindowPtr present_window,
 
     wl_display_flush(xwl_window->xwl_screen->display);
 
+
+//    present_wnmd_event_notify(xwl_window->present_window,
+//                              event->event_id,
+//                              0,
+//                              xwl_window->present_msc);
+//    event->pending = FALSE;
+
     ErrorF("ZZ xwl_present_flip END\n");
 
     return TRUE;
@@ -433,6 +439,7 @@ xwl_present_flip(WindowPtr present_window,
 static void
 xwl_present_unflip(WindowPtr window, uint64_t event_id)
 {
+    ErrorF("XX xwl_present_unflip EVENT %d\n", event_id);
     xwl_present_cleanup(window);
     present_wnmd_event_notify(window, event_id, 0, 0);
 }
@@ -450,8 +457,7 @@ static present_wnmd_info_rec xwl_present_info = {
     .capabilities = PresentCapabilityAsync,
     .check_flip = xwl_present_check_flip,
     .flip = xwl_present_flip,
-    .unflip = xwl_present_unflip,
-//    .flip_executed = xwl_present_flip_executed
+    .unflip = xwl_present_unflip
 };
 
 Bool

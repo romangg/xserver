@@ -74,7 +74,10 @@ present_wnmd_flip_try_ready(WindowPtr window)
     present_window_priv_ptr window_priv = present_window_priv(window);
     present_vblank_ptr      vblank;
 
+    ErrorF("PP present_wnmd_flip_try_ready!\n");
+
     xorg_list_for_each_entry(vblank, &window_priv->flip_queue, event_queue) {
+        ErrorF("PP present_wnmd_flip_try_ready VBLANK %d | %d\n", vblank->event_id, vblank->queued);
         if (vblank->queued) {
             present_wnmd_re_execute(vblank);
             return;
@@ -150,7 +153,7 @@ present_wnmd_restore_window_pixmap(WindowPtr window)
      */
     present_set_tree_pixmap(toplvl, flip_pixmap, restore_pixmap);
 
-    window_priv->restore_pixmap--;
+    window_priv->restore_pixmap->refcnt--;
 
     toplvl_priv->flip_window = NULL;
     window_priv->restore_pixmap = NULL;
@@ -200,9 +203,13 @@ present_wnmd_flip_notify(present_vblank_ptr vblank, uint64_t ust, uint64_t crtc_
 
     xorg_list_del(&vblank->event_queue);
 
-    if (window_priv->flip_active)
-        /* Put the flip in the idle_queue and wait for further notice from DDX */
-        xorg_list_append(&window_priv->flip_active->event_queue, &window_priv->idle_queue);
+    if (window_priv->flip_active) {
+        if (window_priv->flip_active->flip_idler)
+            present_wnmd_free_idle_vblank(window_priv->flip_active);
+        else
+            /* Put the previous flip in the idle_queue and wait for further notice from DDX */
+            xorg_list_append(&window_priv->flip_active->event_queue, &window_priv->idle_queue);
+    }
 
     window_priv->flip_active = vblank;
     window_priv->flip_pending = NULL;
@@ -226,6 +233,12 @@ present_wnmd_event_notify(WindowPtr window, uint64_t event_id, uint64_t ust, uin
         return;
     if (!event_id)
         return;
+
+    if (window_priv->flip_active && window_priv->flip_active->event_id == event_id) {
+        /* Notify for active flip, means it is allowed to become idle */
+        window_priv->flip_active->flip_idler = TRUE;
+        return;
+    }
 
     DebugPresent(("\te %lld ust %lld msc %lld\n", event_id, ust, msc));
     xorg_list_for_each_entry(vblank, &window_priv->exec_queue, event_queue) {
@@ -668,9 +681,12 @@ present_wnmd_abort_vblank(ScreenPtr screen, WindowPtr window, RRCrtcPtr crtc, ui
 
     assert(crtc);
 
+    ErrorF("PP present_wnmd_abort_vblank %d\n", event_id);
+
     (*screen_priv->wnmd_info->abort_vblank) (window, crtc, event_id, msc);
 
     xorg_list_for_each_entry(vblank, &window_priv->exec_queue, event_queue) {
+        ErrorF("P present_wnmd_abort_vblank exec_queue %d\n", vblank->event_id);
         if (vblank->event_id == event_id) {
             xorg_list_del(&vblank->event_queue);
             vblank->queued = FALSE;
@@ -678,6 +694,7 @@ present_wnmd_abort_vblank(ScreenPtr screen, WindowPtr window, RRCrtcPtr crtc, ui
         }
     }
     xorg_list_for_each_entry(vblank, &window_priv->flip_queue, event_queue) {
+        ErrorF("P present_wnmd_abort_vblank flip_queue %d\n", vblank->event_id);
         if (vblank->event_id == event_id) {
             xorg_list_del(&vblank->event_queue);
             vblank->queued = FALSE;
@@ -689,6 +706,9 @@ present_wnmd_abort_vblank(ScreenPtr screen, WindowPtr window, RRCrtcPtr crtc, ui
 static void
 present_wnmd_flip_destroy(ScreenPtr screen)
 {
+
+    ErrorF("PP present_wnmd_flip_destroy!\n");
+
     /* Cleanup done on window destruction */
 }
 
@@ -697,6 +717,8 @@ present_wnmd_flush(WindowPtr window)
 {
     ScreenPtr               screen = window->drawable.pScreen;
     present_screen_priv_ptr screen_priv = present_screen_priv(screen);
+
+    ErrorF("PP present_wnmd_flush!\n");
 
     (*screen_priv->wnmd_info->flush) (window);
 }
