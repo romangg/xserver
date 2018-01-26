@@ -387,12 +387,13 @@ present_wnmd_flip(WindowPtr window,
                   uint64_t event_id,
                   uint64_t target_msc,
                   PixmapPtr pixmap,
-                  Bool sync_flip)
+                  Bool sync_flip,
+                  RegionPtr damage)
 {
     ScreenPtr                   screen = crtc->pScreen;
     present_screen_priv_ptr     screen_priv = present_screen_priv(screen);
 
-    return (*screen_priv->wnmd_info->flip) (window, crtc, event_id, target_msc, pixmap, sync_flip);
+    return (*screen_priv->wnmd_info->flip) (window, crtc, event_id, target_msc, pixmap, sync_flip, damage);
 }
 
 static void
@@ -456,6 +457,12 @@ present_wnmd_execute(present_vblank_ptr vblank, uint64_t ust, uint64_t crtc_msc)
                           vblank->event_id, vblank, crtc_msc,
                           vblank->pixmap->drawable.id, vblank->window->drawable.id));
 
+            if (vblank->update) {
+                damage = vblank->update;
+                RegionIntersect(damage, damage, &window->clipList);
+            } else
+                damage = &window->clipList;
+
             /* Prepare to flip by placing it in the flip queue
              */
             xorg_list_add(&vblank->event_queue, &window_priv->flip_queue);
@@ -465,7 +472,7 @@ present_wnmd_execute(present_vblank_ptr vblank, uint64_t ust, uint64_t crtc_msc)
             window_priv->flip_pending = vblank;
             // ask the driver
             if (present_wnmd_flip(vblank->window, vblank->crtc, vblank->event_id,
-                                     vblank->target_msc, vblank->pixmap, vblank->sync_flip)) {
+                                     vblank->target_msc, vblank->pixmap, vblank->sync_flip, damage)) {
 
                 WindowPtr toplvl = present_wnmd_toplvl_flip_window(window);
                 present_window_priv_ptr toplvl_priv = present_get_window_priv(toplvl, TRUE);
@@ -498,12 +505,6 @@ present_wnmd_execute(present_vblank_ptr vblank, uint64_t ust, uint64_t crtc_msc)
 
                 /* Report update region as damaged
                  */
-                if (vblank->update) {
-                    damage = vblank->update;
-                    RegionIntersect(damage, damage, &window->clipList);
-                } else
-                    damage = &window->clipList;
-
                 DamageDamageRegion(&vblank->window->drawable, damage);
                 return;
             }

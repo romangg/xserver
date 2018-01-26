@@ -349,10 +349,12 @@ xwl_present_flip(WindowPtr present_window,
                  uint64_t event_id,
                  uint64_t target_msc,
                  PixmapPtr pixmap,
-                 Bool sync_flip)
+                 Bool sync_flip,
+                 RegionPtr damage)
 {
     struct xwl_window           *xwl_window = xwl_window_of_top(present_window);
     BoxPtr                      present_box;
+    BoxPtr                      damage_box = RegionExtents(damage);
     Bool                        buffer_created;
     struct wl_buffer            *buffer;
     struct xwl_present_event    *event;
@@ -413,7 +415,7 @@ xwl_present_flip(WindowPtr present_window,
     ErrorF("ZZZ2 Y %d, %d | %d\n", present_box->y1, present_box->y2, present_box->y2 - present_box->y1);
 
     wl_surface_damage(xwl_window->present_surface, 0, 0,
-                      present_box->x2 - present_box->x1, present_box->y2 - present_box->y1);
+                      damage_box->x2 - damage_box->x1, damage_box->y2 - damage_box->y1);
 
     wl_surface_commit(xwl_window->present_surface);
 
