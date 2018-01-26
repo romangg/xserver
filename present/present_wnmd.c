@@ -153,7 +153,7 @@ present_wnmd_restore_window_pixmap(WindowPtr window)
      */
     present_set_tree_pixmap(toplvl, flip_pixmap, restore_pixmap);
 
-    window_priv->restore_pixmap->refcnt--;
+    dixDestroyPixmap(window_priv->restore_pixmap, window_priv->restore_pixmap->drawable.id);
 
     toplvl_priv->flip_window = NULL;
     window_priv->restore_pixmap = NULL;
@@ -302,10 +302,6 @@ present_wnmd_check_flip(RRCrtcPtr    crtc,
 
     /* Check to see if the driver supports flips at all */
     if (!screen_priv->wnmd_info->flip)
-        return FALSE;
-
-    /* Only flip windows with parent */
-    if (!window->parent)
         return FALSE;
 
     /* Don't flip redirected windows */
