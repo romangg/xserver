@@ -115,9 +115,6 @@ present_wnmd_clear_window_flip(WindowPtr window)
     present_window_priv_ptr     window_priv = present_window_priv(window);
     present_vblank_ptr          vblank, tmp;
 
-    if (window_priv->restore_pixmap)
-        present_wnmd_restore_window_pixmap(window);
-
     if (window_priv->flip_pending) {
         present_wnmd_set_abort_flip(window);
         window_priv->flip_pending->window = NULL;

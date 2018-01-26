@@ -112,7 +112,7 @@ present_wnmd_free_idle_vblanks(WindowPtr window)
 }
 
 static WindowPtr
-present_wnmd_toplvl_flip_window(WindowPtr window)
+present_wnmd_toplvl_pixmap_window(WindowPtr window)
 {
     ScreenPtr       screen = window->drawable.pScreen;
     PixmapPtr       pixmap = (*screen->GetWindowPixmap)(window);
@@ -130,42 +130,11 @@ present_wnmd_toplvl_flip_window(WindowPtr window)
 }
 
 void
-present_wnmd_restore_window_pixmap(WindowPtr window)
-{
-    present_window_priv_ptr     window_priv = present_window_priv(window);
-    WindowPtr                   toplvl = present_wnmd_toplvl_flip_window(window);
-    present_window_priv_ptr     toplvl_priv = present_window_priv(toplvl);
-    PixmapPtr                   flip_pixmap;
-    PixmapPtr                   restore_pixmap = window_priv->restore_pixmap;
-
-    if (!restore_pixmap)
-        return;
-
-    flip_pixmap = window_priv->flip_pending ? window_priv->flip_pending->pixmap :
-                                              window_priv->flip_active->pixmap;
-    assert (flip_pixmap);
-
-    /* Update the window pixmap with the current flip pixmap contents */
-    present_copy_region(&restore_pixmap->drawable, flip_pixmap, NULL, 0, 0);
-
-    /* Switch back to using the original window pixmap now to avoid
-     * 2D applications drawing to the wrong pixmap.
-     */
-    present_set_tree_pixmap(toplvl, flip_pixmap, restore_pixmap);
-
-    dixDestroyPixmap(window_priv->restore_pixmap, window_priv->restore_pixmap->drawable.id);
-
-    toplvl_priv->flip_window = NULL;
-    window_priv->restore_pixmap = NULL;
-}
-
-void
 present_wnmd_set_abort_flip(WindowPtr window)
 {
     present_window_priv_ptr window_priv = present_window_priv(window);
 
     if (!window_priv->flip_pending->abort_flip) {
-        present_wnmd_restore_window_pixmap(window);
         window_priv->flip_pending->abort_flip = TRUE;
     }
 }
@@ -178,8 +147,6 @@ present_wnmd_unflip(WindowPtr window)
 
     assert (!window_priv->unflip_event_id);
     assert (!window_priv->flip_pending);
-
-    present_wnmd_restore_window_pixmap(window);
 
     window_priv->unflip_event_id = ++window_priv->event_id;
     DebugPresent(("u %lld\n", window_priv->unflip_event_id));
@@ -289,7 +256,7 @@ present_wnmd_check_flip(RRCrtcPtr    crtc,
 {
     ScreenPtr               screen = window->drawable.pScreen;
     present_screen_priv_ptr screen_priv = present_screen_priv(screen);
-    WindowPtr               toplvl_window = present_wnmd_toplvl_flip_window(window);
+    WindowPtr               toplvl_window = present_wnmd_toplvl_pixmap_window(window);
 
     if (!screen_priv)
         return FALSE;
@@ -470,34 +437,12 @@ present_wnmd_execute(present_vblank_ptr vblank, uint64_t ust, uint64_t crtc_msc)
             if (present_wnmd_flip(vblank->window, vblank->crtc, vblank->event_id,
                                      vblank->target_msc, vblank->pixmap, vblank->sync_flip, damage)) {
 
-                WindowPtr toplvl = present_wnmd_toplvl_flip_window(window);
-                present_window_priv_ptr toplvl_priv = present_get_window_priv(toplvl, TRUE);
-
-                /* Fix window pixmaps:
-                 *  1) Remove flips for possible other flip windows associated with the same toplevel window,
-                 *     since we currently only support one flip window per toplevel
-                 *  2) Remember restore pixmap
-                 *  3) Set current flip window pixmap to the new pixmap
-                 */
-                if (toplvl_priv->flip_window && toplvl_priv->flip_window != window)
-                    present_wnmd_cancel_flip(toplvl_priv->flip_window);
-                toplvl_priv->flip_window = window;
-
-                if (!window_priv->restore_pixmap) {
-                    window_priv->restore_pixmap = (*screen->GetWindowPixmap)(window);
-                    window_priv->restore_pixmap->refcnt++;
-                }
-
-                ErrorF("PP present_wnmd_execute X: %d, %d\n", window->drawable.x, vblank->pixmap->drawable.x);
-
-                vblank->pixmap->drawable.x = window->drawable.x;
-                vblank->pixmap->drawable.y = window->drawable.y;
-#ifdef COMPOSITE
-                ErrorF("PP present_wnmd_execute X: %d, %d\n", window_priv->restore_pixmap->screen_x, vblank->pixmap->screen_x);
-                vblank->pixmap->screen_x = window_priv->restore_pixmap->screen_x;
-                vblank->pixmap->screen_y = window_priv->restore_pixmap->screen_y;
-#endif
-                present_set_tree_pixmap(toplvl, NULL, vblank->pixmap);
+                /* Fix window pixmap: Copy pixmap content to window drawable */
+                present_copy_region(&window->drawable,
+                                    vblank->pixmap,
+                                    vblank->update,
+                                    vblank->x_off,
+                                    vblank->y_off);
 
                 /* Report update region as damaged
                  */

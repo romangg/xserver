@@ -228,7 +228,6 @@ struct present_window_priv {
     uint64_t               unflip_event_id;
 
     WindowPtr              flip_window;
-    PixmapPtr              restore_pixmap;
 };
 
 #define PresentCrtcNeverSet     ((RRCrtcPtr) 1)
@@ -479,9 +478,6 @@ sproc_present_dispatch(ClientPtr client);
  */
 void
 present_wnmd_set_abort_flip(WindowPtr window);
-
-void
-present_wnmd_restore_window_pixmap(WindowPtr window);
 
 void
 present_wnmd_init_mode_hooks(present_screen_priv_ptr screen_priv);
