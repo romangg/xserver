@@ -95,6 +95,23 @@ typedef Bool (*present_priv_check_flip_ptr)(RRCrtcPtr crtc,
                                             int16_t y_off);
 typedef void (*present_priv_check_flip_window_ptr)(WindowPtr window);
 
+typedef int (*present_priv_pixmap_ptr)(WindowPtr window,
+                                       PixmapPtr pixmap,
+                                       CARD32 serial,
+                                       RegionPtr valid,
+                                       RegionPtr update,
+                                       int16_t x_off,
+                                       int16_t y_off,
+                                       RRCrtcPtr target_crtc,
+                                       SyncFence *wait_fence,
+                                       SyncFence *idle_fence,
+                                       uint32_t options,
+                                       uint64_t window_msc,
+                                       uint64_t divisor,
+                                       uint64_t remainder,
+                                       present_notify_ptr notifies,
+                                       int num_notifies);
+
 typedef void (*present_priv_create_event_id_ptr)(present_vblank_ptr vblank);
 
 typedef int (*present_priv_queue_vblank_ptr)(ScreenPtr screen,
@@ -129,6 +146,7 @@ typedef struct present_screen_priv {
     present_priv_check_flip_ptr         check_flip;
     present_priv_check_flip_window_ptr  check_flip_window;
 
+    present_priv_pixmap_ptr             present_pixmap;
     present_priv_create_event_id_ptr    create_event_id;
 
     present_priv_queue_vblank_ptr       queue_vblank;
@@ -209,6 +227,31 @@ present_copy_region(DrawablePtr drawable,
                     int16_t y_off);
 void
 present_pixmap_idle(PixmapPtr pixmap, WindowPtr window, CARD32 serial, struct present_fence *present_fence);
+
+int
+present_pixmap(WindowPtr window,
+               PixmapPtr pixmap,
+               CARD32 serial,
+               RegionPtr valid,
+               RegionPtr update,
+               int16_t x_off,
+               int16_t y_off,
+               RRCrtcPtr target_crtc,
+               SyncFence *wait_fence,
+               SyncFence *idle_fence,
+               uint32_t options,
+               uint64_t target_msc,
+               uint64_t divisor,
+               uint64_t remainder,
+               present_notify_ptr notifies,
+               int num_notifies);
+
+int
+present_notify_msc(WindowPtr window,
+                   CARD32 serial,
+                   uint64_t target_msc,
+                   uint64_t divisor,
+                   uint64_t remainder);
 
 /*
  * present_event.c
@@ -325,31 +368,6 @@ sproc_present_dispatch(ClientPtr client);
 /*
  * present_scmd.c
  */
-int
-present_pixmap(WindowPtr window,
-               PixmapPtr pixmap,
-               CARD32 serial,
-               RegionPtr valid,
-               RegionPtr update,
-               int16_t x_off,
-               int16_t y_off,
-               RRCrtcPtr target_crtc,
-               SyncFence *wait_fence,
-               SyncFence *idle_fence,
-               uint32_t options,
-               uint64_t target_msc,
-               uint64_t divisor,
-               uint64_t remainder,
-               present_notify_ptr notifies,
-               int num_notifies);
-
-int
-present_notify_msc(WindowPtr window,
-                   CARD32 serial,
-                   uint64_t target_msc,
-                   uint64_t divisor,
-                   uint64_t remainder);
-
 void
 present_abort_vblank(ScreenPtr screen, RRCrtcPtr crtc, uint64_t event_id, uint64_t msc);
 
