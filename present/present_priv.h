@@ -83,9 +83,15 @@ struct present_vblank {
     Bool                abort_flip;     /* aborting this flip */
 };
 
+typedef struct present_screen_priv present_screen_priv_rec, *present_screen_priv_ptr;
+
 /*
  * Mode hooks
  */
+typedef uint32_t (*present_priv_query_capabilities_ptr)(present_screen_priv_ptr screen_priv);
+typedef RRCrtcPtr (*present_priv_get_crtc_ptr)(present_screen_priv_ptr screen_priv,
+                                               WindowPtr window);
+
 typedef Bool (*present_priv_check_flip_ptr)(RRCrtcPtr crtc,
                                             WindowPtr window,
                                             PixmapPtr pixmap,
@@ -121,7 +127,13 @@ typedef int (*present_priv_queue_vblank_ptr)(ScreenPtr screen,
 typedef void (*present_priv_flush_ptr)(WindowPtr window);
 typedef void (*present_priv_re_execute_ptr)(present_vblank_ptr vblank);
 
-typedef struct present_screen_priv {
+typedef void (*present_priv_abort_vblank_ptr)(ScreenPtr screen,
+                                              RRCrtcPtr crtc,
+                                              uint64_t event_id,
+                                              uint64_t msc);
+typedef void (*present_priv_flip_destroy_ptr)(ScreenPtr screen);
+
+struct present_screen_priv {
     CloseScreenProcPtr          CloseScreen;
     ConfigNotifyProcPtr         ConfigNotify;
     DestroyWindowProcPtr        DestroyWindow;
@@ -143,6 +155,9 @@ typedef struct present_screen_priv {
     present_screen_info_ptr     info;
 
     /* Mode hooks */
+    present_priv_query_capabilities_ptr query_capabilities;
+    present_priv_get_crtc_ptr           get_crtc;
+
     present_priv_check_flip_ptr         check_flip;
     present_priv_check_flip_window_ptr  check_flip_window;
 
@@ -153,7 +168,9 @@ typedef struct present_screen_priv {
     present_priv_flush_ptr              flush;
     present_priv_re_execute_ptr         re_execute;
 
-} present_screen_priv_rec, *present_screen_priv_ptr;
+    present_priv_abort_vblank_ptr       abort_vblank;
+    present_priv_flip_destroy_ptr       flip_destroy;
+};
 
 #define wrap(priv,real,mem,func) {\
     priv->mem = real->mem; \
@@ -219,6 +236,12 @@ msc_is_after(uint64_t test, uint64_t reference)
 /*
  * present.c
  */
+uint32_t
+present_query_capabilities(RRCrtcPtr crtc);
+
+RRCrtcPtr
+present_get_crtc(WindowPtr window);
+
 void
 present_copy_region(DrawablePtr drawable,
                     PixmapPtr pixmap,
@@ -386,12 +409,6 @@ present_restore_screen_pixmap(ScreenPtr screen);
 
 void
 present_set_abort_flip(ScreenPtr screen);
-
-RRCrtcPtr
-present_get_crtc(WindowPtr window);
-
-uint32_t
-present_query_capabilities(RRCrtcPtr crtc);
 
 Bool
 present_init(void);
