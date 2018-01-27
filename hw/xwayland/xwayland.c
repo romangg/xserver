@@ -515,6 +515,13 @@ xwl_realize_window(WindowPtr window)
         wl_region_destroy(region);
     }
 
+    if (xwl_screen->present) {
+        xwl_window->present_crtc_fake = RRCrtcCreate(xwl_screen->screen, xwl_window);
+        xwl_window->present_msc = 1;
+        xorg_list_init(&xwl_window->present_event_list);
+        xorg_list_init(&xwl_window->present_release_queue);
+    }
+
     wl_display_flush(xwl_screen->display);
 
     send_surface_id_event(xwl_window);
@@ -580,6 +587,10 @@ xwl_unrealize_window(WindowPtr window)
 
     compUnredirectWindow(serverClient, window, CompositeRedirectManual);
 
+    if (xwl_screen->present)
+        /* Always cleanup Present (Present might have been active on child window) */
+        xwl_present_cleanup(window);
+
     screen->UnrealizeWindow = xwl_screen->UnrealizeWindow;
     ret = (*screen->UnrealizeWindow) (window);
     xwl_screen->UnrealizeWindow = screen->UnrealizeWindow;
@@ -597,6 +608,9 @@ xwl_unrealize_window(WindowPtr window)
     DamageDestroy(xwl_window->damage);
     if (xwl_window->frame_callback)
         wl_callback_destroy(xwl_window->frame_callback);
+
+    if (xwl_window->present_crtc_fake)
+        RRCrtcDestroy(xwl_window->present_crtc_fake);
 
     free(xwl_window);
     dixSetPrivate(&window->devPrivates, &xwl_window_private_key, NULL);
@@ -683,6 +697,9 @@ xwl_screen_post_damage(struct xwl_screen *xwl_screen)
 
     xorg_list_for_each_entry_safe(xwl_window, next_xwl_window,
                                   &xwl_screen->damage_window_list, link_damage) {
+        /* Present on the main surface. So don't commit here as well. */
+        if (xwl_window->present_surface)
+            continue;
         /* If we're waiting on a frame callback from the server,
          * don't attach a new buffer. */
         if (xwl_window->frame_callback)
@@ -1021,6 +1038,9 @@ xwl_screen_init(ScreenPtr pScreen, int argc, char **argv)
         xwl_screen->glamor = 0;
     }
 #endif
+
+    if (xwl_screen->glamor && xwl_screen->rootless)
+        xwl_screen->present = xwl_present_init(pScreen);
 
     if (!xwl_screen->glamor) {
         xwl_screen->CreateScreenResources = pScreen->CreateScreenResources;
