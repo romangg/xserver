@@ -228,6 +228,13 @@ present_copy_region(DrawablePtr drawable,
 void
 present_pixmap_idle(PixmapPtr pixmap, WindowPtr window, CARD32 serial, struct present_fence *present_fence);
 
+void
+present_adjust_timings(uint32_t options,
+                       uint64_t *crtc_msc,
+                       uint64_t *target_msc,
+                       uint64_t divisor,
+                       uint64_t remainder);
+
 int
 present_pixmap(WindowPtr window,
                PixmapPtr pixmap,
