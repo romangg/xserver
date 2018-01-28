@@ -79,6 +79,7 @@ struct xwl_screen {
     struct wl_registry *registry;
     struct wl_registry *input_registry;
     struct wl_compositor *compositor;
+    struct wl_subcompositor *subcompositor;
     struct zwp_tablet_manager_v2 *tablet_manager;
     struct wl_shm *shm;
     struct wl_shell *shell;
@@ -135,6 +136,7 @@ struct xwl_window {
     struct xorg_list present_link;
     WindowPtr present_window;
     struct wl_surface *present_surface;
+    struct wl_subsurface *present_subsurface;
     uint64_t present_msc;
 
     Bool present_frame_timer_firing;

@@ -120,24 +120,6 @@ present_wnmd_free_idle_vblanks(WindowPtr window)
     }
 }
 
-static WindowPtr
-present_wnmd_toplvl_pixmap_window(WindowPtr window)
-{
-    ScreenPtr       screen = window->drawable.pScreen;
-    PixmapPtr       pixmap = (*screen->GetWindowPixmap)(window);
-    WindowPtr       w = window;
-    WindowPtr       next_w;
-
-    while(w->parent) {
-        next_w = w->parent;
-        if ( (*screen->GetWindowPixmap)(next_w) != pixmap) {
-            break;
-        }
-        w = next_w;
-    }
-    return w;
-}
-
 void
 present_wnmd_set_abort_flip(WindowPtr window)
 {
@@ -257,7 +239,6 @@ present_wnmd_check_flip(RRCrtcPtr    crtc,
 {
     ScreenPtr               screen = window->drawable.pScreen;
     present_screen_priv_ptr screen_priv = present_screen_priv(screen);
-    WindowPtr               toplvl_window = present_wnmd_toplvl_pixmap_window(window);
 
     if (!screen_priv)
         return FALSE;
@@ -285,10 +266,6 @@ present_wnmd_check_flip(RRCrtcPtr    crtc,
     /* Flip pixmap must have same dimensions as window */
     if (window->drawable.width != pixmap->drawable.width ||
             window->drawable.height != pixmap->drawable.height)
-        return FALSE;
-
-    /* Window must be same region as toplevel window */
-    if ( !RegionEqual(&window->winSize, &toplvl_window->winSize) )
         return FALSE;
 
     /* Ask the driver for permission */
