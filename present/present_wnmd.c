@@ -351,7 +351,8 @@ present_wnmd_flip(WindowPtr window,
                   uint64_t event_id,
                   uint64_t target_msc,
                   PixmapPtr pixmap,
-                  Bool sync_flip)
+                  Bool sync_flip,
+                  RegionPtr damage)
 {
     ScreenPtr                   screen = crtc->pScreen;
     present_screen_priv_ptr     screen_priv = present_screen_priv(screen);
@@ -361,7 +362,8 @@ present_wnmd_flip(WindowPtr window,
                                             event_id,
                                             target_msc,
                                             pixmap,
-                                            sync_flip);
+                                            sync_flip,
+                                            damage);
 }
 
 static void
@@ -422,12 +424,19 @@ present_wnmd_execute(present_vblank_ptr vblank, uint64_t ust, uint64_t crtc_msc)
              */
             xorg_list_add(&vblank->event_queue, &window_priv->flip_queue);
 
+            /* Set update region as damaged */
+            if (vblank->update) {
+                damage = vblank->update;
+                RegionIntersect(damage, damage, &window->clipList);
+            } else
+                damage = &window->clipList;
+
             /* Try to flip - the vblank is now pending
              */
             window_priv->flip_pending = vblank;
             // ask the driver
             if (present_wnmd_flip(vblank->window, vblank->crtc, vblank->event_id,
-                                     vblank->target_msc, vblank->pixmap, vblank->sync_flip)) {
+                                     vblank->target_msc, vblank->pixmap, vblank->sync_flip, damage)) {
 
                 /* Fix window pixmap: Copy pixmap content to window drawable */
                 present_copy_region(&window->drawable,
@@ -436,14 +445,7 @@ present_wnmd_execute(present_vblank_ptr vblank, uint64_t ust, uint64_t crtc_msc)
                                     vblank->x_off,
                                     vblank->y_off);
 
-                /* Report update region as damaged
-                 */
-                if (vblank->update) {
-                    damage = vblank->update;
-                    RegionIntersect(damage, damage, &window->clipList);
-                } else
-                    damage = &window->clipList;
-
+                /* Report damage */
                 DamageDamageRegion(&vblank->window->drawable, damage);
                 return;
             }
