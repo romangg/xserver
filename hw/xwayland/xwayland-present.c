@@ -27,7 +27,7 @@
 
 #include <present.h>
 
-#define FRAME_TIMER_IVAL 67 // ~15fps
+#define FRAME_TIMER_IVAL 33 // ~30fps
 
 static void
 xwl_present_free_timer(struct xwl_window *xwl_window)
@@ -35,6 +35,28 @@ xwl_present_free_timer(struct xwl_window *xwl_window)
     TimerFree(xwl_window->present_frame_timer);
     xwl_window->present_frame_timer = NULL;
     xwl_window->present_frame_timer_window = NULL;
+}
+
+static CARD32
+xwl_present_frame_timer_callback(OsTimerPtr timer,
+                             CARD32 time,
+                             void *arg);
+
+static void
+xwl_present_reset_timer(struct xwl_window *xwl_window)
+{
+    if ( ( xorg_list_is_empty(&xwl_window->present_event_list) &&
+           xorg_list_is_empty(&xwl_window->present_release_queue) ) ||
+         !xwl_window->present_window ) {
+        xwl_present_free_timer(xwl_window);
+    } else {
+        xwl_window->present_frame_timer = TimerSet(xwl_window->present_frame_timer,
+                                                   0,
+                                                   FRAME_TIMER_IVAL,
+                                                   &xwl_present_frame_timer_callback,
+                                                   xwl_window);
+        xwl_window->present_frame_timer_window = xwl_window->present_window;
+    }
 }
 
 void
@@ -133,7 +155,7 @@ xwl_present_events_notify(struct xwl_window *xwl_window)
     }
 }
 
-static CARD32
+CARD32
 xwl_present_frame_timer_callback(OsTimerPtr timer,
                              CARD32 time,
                              void *arg)
@@ -152,23 +174,6 @@ xwl_present_frame_timer_callback(OsTimerPtr timer,
     } else {
         /* Still events, restart timer */
         return FRAME_TIMER_IVAL;
-    }
-}
-
-static void
-xwl_present_reset_timer(struct xwl_window *xwl_window)
-{
-    if ( ( xorg_list_is_empty(&xwl_window->present_event_list) &&
-           xorg_list_is_empty(&xwl_window->present_release_queue) ) ||
-         !xwl_window->present_window ) {
-        xwl_present_free_timer(xwl_window);
-    } else {
-        xwl_window->present_frame_timer = TimerSet(xwl_window->present_frame_timer,
-                                                   0,
-                                                   FRAME_TIMER_IVAL,
-                                                   &xwl_present_frame_timer_callback,
-                                                   xwl_window);
-        xwl_window->present_frame_timer_window = xwl_window->present_window;
     }
 }
 
@@ -279,12 +284,36 @@ xwl_present_queue_vblank(WindowPtr present_window,
                          uint64_t event_id,
                          uint64_t msc)
 {
-    /*
-     * Queuing events is not yet implemented.
-     *
-     */
-    return BadRequest;
-    /* */
+    struct xwl_window *xwl_window = xwl_window_of_top(present_window);
+    struct xwl_present_event *event;
+
+    if (!xwl_window)
+        return BadMatch;
+
+    if (xwl_window->present_crtc_fake != crtc)
+        return BadRequest;
+
+    if (xwl_window->present_window &&
+            xwl_window->present_window != present_window)
+        return BadMatch;
+
+    event = malloc(sizeof *event);
+    if (!event)
+        return BadAlloc;
+
+    xwl_present_set_present_window(xwl_window, present_window);
+
+    event->event_id = event_id;
+    event->present_window = present_window;
+    event->xwl_window = xwl_window;
+    event->target_msc = msc;
+
+    xorg_list_add(&event->list, &xwl_window->present_event_list);
+
+    if (!xwl_window->present_frame_timer)
+        xwl_present_reset_timer(xwl_window);
+
+    return Success;
 }
 
 /*
