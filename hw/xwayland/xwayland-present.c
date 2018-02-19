@@ -34,7 +34,6 @@ xwl_present_free_timer(struct xwl_window *xwl_window)
 {
     TimerFree(xwl_window->present_frame_timer);
     xwl_window->present_frame_timer = NULL;
-    xwl_window->present_frame_timer_window = NULL;
 }
 
 static CARD32
@@ -46,8 +45,7 @@ static void
 xwl_present_reset_timer(struct xwl_window *xwl_window)
 {
     if ( ( xorg_list_is_empty(&xwl_window->present_event_list) &&
-           xorg_list_is_empty(&xwl_window->present_release_queue) ) ||
-         !xwl_window->present_window ) {
+           xorg_list_is_empty(&xwl_window->present_release_queue) ) ) {
         xwl_present_free_timer(xwl_window);
     } else {
         xwl_window->present_frame_timer = TimerSet(xwl_window->present_frame_timer,
@@ -55,7 +53,6 @@ xwl_present_reset_timer(struct xwl_window *xwl_window)
                                                    FRAME_TIMER_IVAL,
                                                    &xwl_present_frame_timer_callback,
                                                    xwl_window);
-        xwl_window->present_frame_timer_window = xwl_window->present_window;
     }
 }
 
@@ -76,12 +73,6 @@ xwl_present_cleanup(WindowPtr window)
         xwl_window->present_window = NULL;
     }
 
-    /* Clear timer */
-    if (xwl_window->present_frame_timer_window == window) {
-        assert(xwl_window->present_frame_timer);
-        xwl_present_free_timer(xwl_window);
-    }
-
     /* Clear remaining events */
     xorg_list_for_each_entry_safe(event, tmp, &xwl_window->present_event_list, list) {
         if (event->present_window == window) {
@@ -97,6 +88,11 @@ xwl_present_cleanup(WindowPtr window)
             event->abort = TRUE;
         }
     }
+
+    /* Clear timer */
+    if ( xorg_list_is_empty(&xwl_window->present_event_list) &&
+         xorg_list_is_empty(&xwl_window->present_release_queue) )
+        xwl_present_free_timer(xwl_window);
 }
 
 static void
@@ -126,7 +122,7 @@ xwl_present_buffer_release(void *data, struct wl_buffer *buffer)
     if (!event->pending) {
         present_wnmd_event_notify(event->present_window,
                                   event->event_id,
-                                  0,
+                                  event->xwl_window->present_ust,
                                   event->xwl_window->present_msc);
         xwl_present_free_event(event);
     }
@@ -148,7 +144,7 @@ xwl_present_events_notify(struct xwl_window *xwl_window)
         if (event->target_msc <= msc) {
             present_wnmd_event_notify(event->present_window,
                                       event->event_id,
-                                      0,
+                                      xwl_window->present_ust,
                                       msc);
             xwl_present_free_event(event);
         }
@@ -164,6 +160,8 @@ xwl_present_frame_timer_callback(OsTimerPtr timer,
 
     xwl_window->present_frame_timer_firing = TRUE;
     xwl_window->present_msc++;
+    xwl_window->present_ust = GetTimeInMicros();
+
     xwl_present_events_notify(xwl_window);
 
     if ( xorg_list_is_empty(&xwl_window->present_event_list) &&
@@ -200,6 +198,8 @@ xwl_present_frame_callback(void *data,
     }
 
     xwl_window->present_msc++;
+    xwl_window->present_ust = GetTimeInMicros();
+
     xwl_present_events_notify(xwl_window);
 }
 
@@ -227,14 +227,14 @@ xwl_present_sync_callback(void *data,
 
     present_wnmd_event_notify(event->present_window,
                               event->event_id,
-                              0,
+                              xwl_window->present_ust,
                               xwl_window->present_msc);
 
     if (event->buffer_released)
         /* If the buffer was already released, send the event now again */
         present_wnmd_event_notify(event->present_window,
                                   event->event_id,
-                                  0,
+                                  xwl_window->present_ust,
                                   xwl_window->present_msc);
 }
 
@@ -258,7 +258,7 @@ xwl_present_get_ust_msc(WindowPtr present_window, uint64_t *ust, uint64_t *msc)
     struct xwl_window *xwl_window = xwl_window_of_top(present_window);
     if (!xwl_window)
         return BadAlloc;
-    *ust = 0;
+    *ust = xwl_window->present_ust;
     *msc = xwl_window->present_msc;
 
     return Success;
@@ -290,6 +290,11 @@ xwl_present_queue_vblank(WindowPtr present_window,
     if (!xwl_window)
         return BadMatch;
 
+    if (msc > xwl_window->present_msc + 100) {
+        ErrorF("Client queued frame too far in the future: %lld -> %lld\n", xwl_window->present_msc, msc);
+        return BadRequest;
+    }
+
     if (xwl_window->present_crtc_fake != crtc)
         return BadRequest;
 
@@ -301,14 +306,12 @@ xwl_present_queue_vblank(WindowPtr present_window,
     if (!event)
         return BadAlloc;
 
-    xwl_present_set_present_window(xwl_window, present_window);
-
     event->event_id = event_id;
     event->present_window = present_window;
     event->xwl_window = xwl_window;
     event->target_msc = msc;
 
-    xorg_list_add(&event->list, &xwl_window->present_event_list);
+    xorg_list_append(&event->list, &xwl_window->present_event_list);
 
     if (!xwl_window->present_frame_timer)
         xwl_present_reset_timer(xwl_window);

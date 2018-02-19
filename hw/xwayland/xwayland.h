@@ -123,6 +123,7 @@ struct xwl_window {
     struct xorg_list present_link;
     WindowPtr present_window;
     uint64_t present_msc;
+    uint64_t present_ust;
 
     Bool present_frame_timer_firing;
     OsTimerPtr present_frame_timer;
