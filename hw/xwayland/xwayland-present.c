@@ -27,7 +27,14 @@
 
 #include <present.h>
 
-#define FRAME_TIMER_IVAL 33 // ~30fps
+/*
+ * When not flipping, let Present copy with 60fps.
+ * When flipping wait on frame_callback, otherwise
+ * the surface is not visible, in this case update
+ * with long interval.
+ */
+#define TIMER_LEN_COPY      17  // ~60fps
+#define TIMER_LEN_FLIP    1000  // 1fps
 
 static void
 xwl_present_free_timer(struct xwl_window *xwl_window)
@@ -48,9 +55,12 @@ xwl_present_reset_timer(struct xwl_window *xwl_window)
            xorg_list_is_empty(&xwl_window->present_release_queue) ) ) {
         xwl_present_free_timer(xwl_window);
     } else {
+        uint32_t timer_len = xwl_window->present_window ? TIMER_LEN_FLIP :
+                                                          TIMER_LEN_COPY;
+
         xwl_window->present_frame_timer = TimerSet(xwl_window->present_frame_timer,
                                                    0,
-                                                   FRAME_TIMER_IVAL,
+                                                   timer_len,
                                                    &xwl_present_frame_timer_callback,
                                                    xwl_window);
     }
@@ -171,7 +181,8 @@ xwl_present_frame_timer_callback(OsTimerPtr timer,
         return 0;
     } else {
         /* Still events, restart timer */
-        return FRAME_TIMER_IVAL;
+        return xwl_window->present_window ? TIMER_LEN_FLIP :
+                                            TIMER_LEN_COPY;
     }
 }
 
@@ -185,15 +196,8 @@ xwl_present_frame_callback(void *data,
     wl_callback_destroy(xwl_window->present_frame_callback);
     xwl_window->present_frame_callback = NULL;
 
-    if (xwl_window->present_window)
-        /* we do not need the timer anymore for this frame,
-         * reset it for potentially the next one
-         */
-        xwl_present_reset_timer(xwl_window);
-
     if (xwl_window->present_frame_timer_firing) {
         /* If the timer is firing, this frame callback is too late */
-        xwl_window->present_frame_timer_firing = FALSE;
         return;
     }
 
@@ -201,6 +205,11 @@ xwl_present_frame_callback(void *data,
     xwl_window->present_ust = GetTimeInMicros();
 
     xwl_present_events_notify(xwl_window);
+
+    /* we do not need the timer anymore for this frame,
+     * reset it for potentially the next one
+     */
+    xwl_present_reset_timer(xwl_window);
 }
 
 static const struct wl_callback_listener xwl_present_frame_listener = {
@@ -291,7 +300,7 @@ xwl_present_queue_vblank(WindowPtr present_window,
         return BadMatch;
 
     if (msc > xwl_window->present_msc + 100) {
-        ErrorF("Client queued frame too far in the future: %lld -> %lld\n", xwl_window->present_msc, msc);
+        ErrorF("Client queued frame too far in the future: %lu -> %lu\n", xwl_window->present_msc, msc);
         return BadRequest;
     }
 
@@ -444,10 +453,14 @@ xwl_present_flip(WindowPtr present_window,
     /* We can flip directly to the main surface (full screen window without clips) */
     wl_surface_attach(xwl_window->surface, buffer, 0, 0);
 
-    if (!xwl_window->present_frame_timer) {
+    if (!xwl_window->present_frame_timer ||
+            xwl_window->present_frame_timer_firing) {
+        /* Realign timer */
         xwl_window->present_frame_timer_firing = FALSE;
         xwl_present_reset_timer(xwl_window);
+    }
 
+    if (!xwl_window->present_frame_callback) {
         xwl_window->present_frame_callback = wl_surface_frame(xwl_window->surface);
         wl_callback_add_listener(xwl_window->present_frame_callback,
                                  &xwl_present_frame_listener,
@@ -480,6 +493,8 @@ xwl_present_flips_stop(WindowPtr window)
     assert(xwl_window->present_window == window);
 
     xwl_window->present_window = NULL;
+
+    xwl_present_reset_timer(xwl_window);
 }
 
 static present_wnmd_info_rec xwl_present_info = {
