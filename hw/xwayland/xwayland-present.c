@@ -303,6 +303,11 @@ xwl_present_queue_vblank(WindowPtr present_window,
     if (!xwl_window)
         return BadMatch;
 
+    if (msc > xwl_window->present_msc + 100) {
+        ErrorF("Client queued frame too far in the future: %lu -> %lu\n", xwl_window->present_msc, msc);
+        return BadRequest;
+    }
+
     if (xwl_window->present_crtc_fake != crtc)
         return BadRequest;
 
