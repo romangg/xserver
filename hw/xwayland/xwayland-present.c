@@ -299,6 +299,7 @@ xwl_present_queue_vblank(WindowPtr present_window,
 {
     struct xwl_window *xwl_window = xwl_window_of_top(present_window);
     struct xwl_present_event *event;
+    INT32 delay;
 
     if (!xwl_window)
         return BadMatch;
@@ -317,7 +318,10 @@ xwl_present_queue_vblank(WindowPtr present_window,
     event->event_id = event_id;
     event->present_window = present_window;
     event->xwl_window = xwl_window;
-    event->target_msc = msc;
+
+    /* Cut off upper 32bit, copies present_fake_queue_vblank. */
+    delay = (int64_t) (msc - xwl_window->present_msc);
+    event->target_msc = xwl_window->present_msc + delay;
 
     xorg_list_append(&event->list, &xwl_window->present_event_list);
 
