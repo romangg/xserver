@@ -527,6 +527,7 @@ xwl_realize_window(WindowPtr window)
         xwl_window->present_msc = 1;
         xwl_window->present_ust = GetTimeInMicros();
 
+        xorg_list_init(&xwl_window->present_event_list);
         xorg_list_init(&xwl_window->present_release_queue);
     }
 
