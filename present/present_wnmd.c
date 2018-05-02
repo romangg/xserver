@@ -61,10 +61,10 @@ present_wnmd_get_crtc(present_screen_priv_ptr screen_priv, WindowPtr window)
 }
 
 static int
-present_wnmd_get_ust_msc(ScreenPtr screen, WindowPtr window, uint64_t *ust, uint64_t *msc)
+present_wnmd_get_ust_msc(ScreenPtr screen, WindowPtr window, RRCrtcPtr crtc, uint64_t *ust, uint64_t *msc)
 {
     present_screen_priv_ptr screen_priv = present_screen_priv(screen);
-    return (*screen_priv->wnmd_info->get_ust_msc)(window, ust, msc);
+    return (*screen_priv->wnmd_info->get_ust_msc)(window, crtc, ust, msc);
 }
 
 /*
@@ -76,7 +76,7 @@ present_wnmd_re_execute(present_vblank_ptr vblank)
 {
     uint64_t ust = 0, crtc_msc = 0;
 
-    (void) present_wnmd_get_ust_msc(vblank->screen, vblank->window, &ust, &crtc_msc);
+    (void) present_wnmd_get_ust_msc(vblank->screen, vblank->window, vblank->crtc, &ust, &crtc_msc);
     present_wnmd_execute(vblank, ust, crtc_msc);
 }
 
@@ -518,6 +518,7 @@ present_wnmd_window_to_crtc_msc(WindowPtr window, RRCrtcPtr crtc, uint64_t windo
     present_window_priv_ptr window_priv = present_get_window_priv(window, TRUE);
 
     if (crtc != window_priv->crtc) {
+        uint64_t old_ust, old_msc;
         if (window_priv->crtc == PresentCrtcNeverSet) {
             window_priv->msc_offset = 0;
         } else {
@@ -525,7 +526,10 @@ present_wnmd_window_to_crtc_msc(WindowPtr window, RRCrtcPtr crtc, uint64_t windo
              * we'll just use whatever previous MSC we'd seen from this CRTC
              */
 
-            window_priv->msc_offset += new_msc - window_priv->msc;
+            if (present_wnmd_get_ust_msc(window->drawable.pScreen, window, window_priv->crtc, &old_ust, &old_msc) != Success)
+                old_msc = window_priv->msc;
+
+            window_priv->msc_offset += new_msc - old_msc;
         }
         window_priv->crtc = crtc;
     }
@@ -565,7 +569,7 @@ present_wnmd_pixmap(WindowPtr window,
 
     target_crtc = present_wnmd_get_crtc(screen_priv, window);
 
-    ret = present_wnmd_get_ust_msc(screen, window, &ust, &crtc_msc);
+    ret = present_wnmd_get_ust_msc(screen, window, target_crtc, &ust, &crtc_msc);
 
     target_msc = present_wnmd_window_to_crtc_msc(window, target_crtc, window_msc, crtc_msc);
 

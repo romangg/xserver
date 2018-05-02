@@ -258,11 +258,19 @@ xwl_present_get_crtc(WindowPtr present_window)
 }
 
 static int
-xwl_present_get_ust_msc(WindowPtr present_window, uint64_t *ust, uint64_t *msc)
+xwl_present_get_ust_msc(WindowPtr present_window, RRCrtcPtr crtc, uint64_t *ust, uint64_t *msc)
 {
     struct xwl_window *xwl_window = xwl_window_from_window(present_window);
     if (!xwl_window)
         return BadAlloc;
+
+    if (xwl_window->present_crtc_fake != crtc) {
+        /* the crtc changed between the last call and this one,
+         * falls back to using the saved window msc in Present
+         */
+        return BadMatch;
+    }
+
     *ust = xwl_window->present_ust;
     *msc = xwl_window->present_msc;
 

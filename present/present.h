@@ -41,7 +41,7 @@ typedef RRCrtcPtr (*present_get_crtc_ptr) (WindowPtr window);
 /* Return the current ust/msc for 'crtc'
  */
 typedef int (*present_get_ust_msc_ptr) (RRCrtcPtr crtc, uint64_t *ust, uint64_t *msc);
-typedef int (*present_wnmd_get_ust_msc_ptr) (WindowPtr window, uint64_t *ust, uint64_t *msc);
+typedef int (*present_wnmd_get_ust_msc_ptr) (WindowPtr window, RRCrtcPtr crtc, uint64_t *ust, uint64_t *msc);
 
 /* Queue callback on 'crtc' for time 'msc'. Call present_event_notify with 'event_id'
  * at or after 'msc'. Return false if it didn't happen (which might occur if 'crtc'
