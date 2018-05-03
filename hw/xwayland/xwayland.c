@@ -644,13 +644,11 @@ xwl_destroy_window(WindowPtr window)
 {
     ScreenPtr screen = window->drawable.pScreen;
     struct xwl_screen *xwl_screen = xwl_screen_get(screen);
-    struct xwl_window *xwl_window;
     Bool ret;
 
 #ifdef GLAMOR_HAS_GBM
-    xwl_window = xwl_window_from_window(window);
-    if (xwl_window && xwl_screen->present)
-        xwl_present_cleanup(xwl_window, window);
+    if (xwl_screen->present)
+        xwl_present_cleanup(window);
 #endif
 
     screen->DestroyWindow = xwl_screen->DestroyWindow;

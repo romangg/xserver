@@ -39,16 +39,21 @@
 static DevPrivateKeyRec xwl_present_window_private_key;
 
 static struct xwl_present_window *
-xwl_present_window_get(WindowPtr window)
+xwl_present_window_priv(WindowPtr window)
 {
-    struct xwl_present_window *xwl_present_window =
-            dixGetPrivate(&window->devPrivates,
-                             &xwl_present_window_private_key);
+    return dixGetPrivate(&window->devPrivates,
+                         &xwl_present_window_private_key);
+}
+
+static struct xwl_present_window *
+xwl_present_window_get_priv(WindowPtr window)
+{
+    struct xwl_present_window *xwl_present_window = xwl_present_window_priv(window);
 
     if (xwl_present_window == NULL) {
         ScreenPtr screen = window->drawable.pScreen;
 
-        xwl_present_window = calloc (1, sizeof (xwl_present_window));
+        xwl_present_window = calloc (1, sizeof (struct xwl_present_window));
         if (!xwl_present_window)
             return NULL;
 
@@ -62,7 +67,7 @@ xwl_present_window_get(WindowPtr window)
         xorg_list_init(&xwl_present_window->release_queue);
 
         dixSetPrivate(&window->devPrivates,
-                      &present_window_private_key,
+                      &xwl_present_window_private_key,
                       xwl_present_window);
     }
 
@@ -70,10 +75,10 @@ xwl_present_window_get(WindowPtr window)
 }
 
 static void
-xwl_present_free_timer(struct xwl_window *xwl_window)
+xwl_present_free_timer(struct xwl_present_window *xwl_present_window)
 {
-    TimerFree(xwl_window->present_timer);
-    xwl_window->present_timer = NULL;
+    TimerFree(xwl_present_window->frame_timer);
+    xwl_present_window->frame_timer = NULL;
 }
 
 static CARD32
@@ -82,57 +87,63 @@ xwl_present_timer_callback(OsTimerPtr timer,
                            void *arg);
 
 static inline Bool
-xwl_present_has_events(struct xwl_window *xwl_window)
+xwl_present_has_events(struct xwl_present_window *xwl_present_window)
 {
-    return !xorg_list_is_empty(&xwl_window->present_event_list) ||
-           !xorg_list_is_empty(&xwl_window->present_release_queue);
+    return !xorg_list_is_empty(&xwl_present_window->event_list) ||
+           !xorg_list_is_empty(&xwl_present_window->release_queue);
 }
 
 static void
-xwl_present_reset_timer(struct xwl_window *xwl_window)
+xwl_present_reset_timer(struct xwl_present_window *xwl_present_window)
 {
-    if (xwl_present_has_events(xwl_window)) {
-        uint32_t timer_len = xwl_window->present_window ? TIMER_LEN_FLIP :
+    if (xwl_present_has_events(xwl_present_window)) {
+        uint32_t timer_len = xwl_present_window->window ? TIMER_LEN_FLIP :
                                                           TIMER_LEN_COPY;
 
-        xwl_window->present_timer = TimerSet(xwl_window->present_timer,
-                                             0,
-                                             timer_len,
-                                             &xwl_present_timer_callback,
-                                             xwl_window);
+        xwl_present_window->frame_timer = TimerSet(xwl_present_window->frame_timer,
+                                                   0,
+                                                   timer_len,
+                                                   &xwl_present_timer_callback,
+                                                   xwl_present_window);
     } else {
-        xwl_present_free_timer(xwl_window);
+        xwl_present_free_timer(xwl_present_window);
     }
 }
 
 void
-xwl_present_cleanup(struct xwl_window *xwl_window, WindowPtr window)
+xwl_present_cleanup(WindowPtr window)
 {
+    struct xwl_window *xwl_window = xwl_window_from_window(window);
+    struct xwl_present_window *xwl_present_window = xwl_present_window_priv(window);
     struct xwl_present_event *event, *tmp;
 
-    if (xwl_window->present_window != window && xwl_window->window != window)
+    if (!xwl_present_window)
         return;
 
-    if (xwl_window->present_frame_callback) {
-        wl_callback_destroy(xwl_window->present_frame_callback);
-        xwl_window->present_frame_callback = NULL;
+    if (xwl_window && xwl_window->present_window == window)
+        xwl_window->present_window = NULL;
+
+    RRCrtcDestroy(xwl_present_window->crtc_fake);
+
+    if (xwl_present_window->frame_callback) {
+        wl_callback_destroy(xwl_present_window->frame_callback);
+        xwl_present_window->frame_callback = NULL;
     }
-    xwl_window->present_window = NULL;
 
     /* Clear remaining events */
-    xorg_list_for_each_entry_safe(event, tmp, &xwl_window->present_event_list, list) {
+    xorg_list_for_each_entry_safe(event, tmp, &xwl_present_window->event_list, list) {
         xorg_list_del(&event->list);
         free(event);
     }
 
     /* Clear remaining buffer releases and inform Present about free ressources */
-    xorg_list_for_each_entry_safe(event, tmp, &xwl_window->present_release_queue, list) {
+    xorg_list_for_each_entry_safe(event, tmp, &xwl_present_window->release_queue, list) {
         xorg_list_del(&event->list);
         event->abort = TRUE;
     }
 
     /* Clear timer */
-    xwl_present_free_timer(xwl_window);
+    xwl_present_free_timer(xwl_present_window);
 }
 
 static void
@@ -146,11 +157,10 @@ static void
 xwl_present_buffer_release(void *data, struct wl_buffer *buffer)
 {
     struct xwl_present_event *event = data;
-
     if (!event)
         return;
-    wl_buffer_set_user_data(buffer, NULL);
 
+    wl_buffer_set_user_data(buffer, NULL);
     event->buffer_released = TRUE;
 
     if (event->abort) {
@@ -160,10 +170,10 @@ xwl_present_buffer_release(void *data, struct wl_buffer *buffer)
     }
 
     if (!event->pending) {
-        present_wnmd_event_notify(event->present_window,
+        present_wnmd_event_notify(event->xwl_present_window->window,
                                   event->event_id,
-                                  event->xwl_window->present_ust,
-                                  event->xwl_window->present_msc);
+                                  event->xwl_present_window->ust,
+                                  event->xwl_present_window->msc);
         xwl_present_free_event(event);
     }
 }
@@ -173,18 +183,18 @@ static const struct wl_buffer_listener xwl_present_release_listener = {
 };
 
 static void
-xwl_present_events_notify(struct xwl_window *xwl_window)
+xwl_present_events_notify(struct xwl_present_window *xwl_present_window)
 {
-    uint64_t                    msc = xwl_window->present_msc;
+    uint64_t                    msc = xwl_present_window->msc;
     struct xwl_present_event    *event, *tmp;
 
     xorg_list_for_each_entry_safe(event, tmp,
-                                  &xwl_window->present_event_list,
+                                  &xwl_present_window->event_list,
                                   list) {
         if (event->target_msc <= msc) {
-            present_wnmd_event_notify(event->present_window,
+            present_wnmd_event_notify(xwl_present_window->window,
                                       event->event_id,
-                                      xwl_window->present_ust,
+                                      xwl_present_window->ust,
                                       msc);
             xwl_present_free_event(event);
         }
@@ -196,21 +206,23 @@ xwl_present_timer_callback(OsTimerPtr timer,
                            CARD32 time,
                            void *arg)
 {
-    struct xwl_window *xwl_window = arg;
+    struct xwl_present_window *xwl_present_window = arg;
+    WindowPtr present_window = xwl_present_window->window;
+    struct xwl_window *xwl_window = xwl_window_from_window(present_window);
 
-    xwl_window->present_timer_firing = TRUE;
-    xwl_window->present_msc++;
-    xwl_window->present_ust = GetTimeInMicros();
+    xwl_present_window->frame_timer_firing = TRUE;
+    xwl_present_window->msc++;
+    xwl_present_window->ust = GetTimeInMicros();
 
-    xwl_present_events_notify(xwl_window);
+    xwl_present_events_notify(xwl_present_window);
 
-    if (xwl_present_has_events(xwl_window)) {
+    if (xwl_present_has_events(xwl_present_window)) {
         /* Still events, restart timer */
-        return xwl_window->present_window ? TIMER_LEN_FLIP :
-                                            TIMER_LEN_COPY;
+        return xwl_window->present_window == present_window ? TIMER_LEN_FLIP :
+                                                              TIMER_LEN_COPY;
     } else {
         /* No more events, do not restart timer and delete it instead */
-        xwl_present_free_timer(xwl_window);
+        xwl_present_free_timer(xwl_present_window);
         return 0;
     }
 }
@@ -283,7 +295,7 @@ static const struct wl_callback_listener xwl_present_sync_listener = {
 static RRCrtcPtr
 xwl_present_get_crtc(WindowPtr present_window)
 {
-    struct xwl_present_window *xwl_present_window = xwl_present_window_get(present_window);
+    struct xwl_present_window *xwl_present_window = xwl_present_window_get_priv(present_window);
     if (xwl_present_window == NULL)
         return NULL;
 
@@ -293,16 +305,9 @@ xwl_present_get_crtc(WindowPtr present_window)
 static int
 xwl_present_get_ust_msc(WindowPtr present_window, RRCrtcPtr crtc, uint64_t *ust, uint64_t *msc)
 {
-    struct xwl_present_window *xwl_present_window = xwl_present_window_get(present_window);
+    struct xwl_present_window *xwl_present_window = xwl_present_window_get_priv(present_window);
     if (!xwl_present_window)
         return BadAlloc;
-
-    if (xwl_present_window->crtc_fake != crtc) {
-        /* the crtc changed between the last call and this one,
-         * falls back to using the saved window msc in Present
-         */
-        return BadMatch;
-    }
 
     *ust = xwl_present_window->ust;
     *msc = xwl_present_window->msc;
@@ -321,7 +326,7 @@ xwl_present_queue_vblank(WindowPtr present_window,
                          uint64_t msc)
 {
     struct xwl_window *xwl_window = xwl_window_from_window(present_window);
-    struct xwl_present_window *xwl_present_window = xwl_present_window_get(present_window);
+    struct xwl_present_window *xwl_present_window = xwl_present_window_get_priv(present_window);
     struct xwl_present_event *event;
 
     if (!xwl_window)
@@ -360,7 +365,7 @@ xwl_present_abort_vblank(WindowPtr present_window,
                          uint64_t event_id,
                          uint64_t msc)
 {
-    struct xwl_present_window *xwl_present_window = xwl_present_window_get(present_window);
+    struct xwl_present_window *xwl_present_window = xwl_present_window_priv(present_window);
     struct xwl_present_event *event, *tmp;
 
     if (!xwl_present_window)
@@ -409,8 +414,6 @@ xwl_present_check_flip2(RRCrtcPtr crtc,
             xwl_window->present_window != present_window)
         return FALSE;
 
-    xwl_window->present_window = present_window;
-
     /*
      * We currently only allow flips of windows, that have the same
      * dimensions as their xwl_window parent window. For the case of
@@ -418,6 +421,8 @@ xwl_present_check_flip2(RRCrtcPtr crtc,
      */
     if (!RegionEqual(&xwl_window->window->winSize, &present_window->winSize))
         return FALSE;
+
+    xwl_window->present_window = present_window;
 
     return TRUE;
 }
@@ -432,7 +437,7 @@ xwl_present_flip(WindowPtr present_window,
                  RegionPtr damage)
 {
     struct xwl_window           *xwl_window = xwl_window_from_window(present_window);
-    struct xwl_present_window   *xwl_present_window = xwl_present_window_get(xwl_window);
+    struct xwl_present_window   *xwl_present_window = xwl_present_window_priv(present_window);
     BoxPtr                      present_box, damage_box;
     Bool                        buffer_created;
     struct wl_buffer            *buffer;
@@ -461,15 +466,14 @@ xwl_present_flip(WindowPtr present_window,
                                              &buffer_created);
 
     event->event_id = event_id;
-    event->present_window = present_window;
-    event->xwl_window = xwl_window;
+    event->xwl_present_window = xwl_present_window;
     event->buffer = buffer;
-    event->target_msc = xwl_window->present_msc;
+    event->target_msc = xwl_present_window->msc;
     event->pending = TRUE;
     event->abort = FALSE;
     event->buffer_released = FALSE;
 
-    xorg_list_add(&event->list, &xwl_window->present_release_queue);
+    xorg_list_add(&event->list, &xwl_present_window->release_queue);
 
     if (buffer_created)
         wl_buffer_add_listener(buffer, &xwl_present_release_listener, NULL);
@@ -478,18 +482,18 @@ xwl_present_flip(WindowPtr present_window,
     /* We can flip directly to the main surface (full screen window without clips) */
     wl_surface_attach(xwl_window->surface, buffer, 0, 0);
 
-    if (!xwl_window->present_timer ||
-            xwl_window->present_timer_firing) {
+    if (!xwl_present_window->frame_timer ||
+            xwl_present_window->frame_timer_firing) {
         /* Realign timer */
-        xwl_window->present_timer_firing = FALSE;
-        xwl_present_reset_timer(xwl_window);
+        xwl_present_window->frame_timer_firing = FALSE;
+        xwl_present_reset_timer(xwl_present_window);
     }
 
-    if (!xwl_window->present_frame_callback) {
-        xwl_window->present_frame_callback = wl_surface_frame(xwl_window->surface);
-        wl_callback_add_listener(xwl_window->present_frame_callback,
+    if (!xwl_present_window->frame_callback) {
+        xwl_present_window->frame_callback = wl_surface_frame(xwl_window->surface);
+        wl_callback_add_listener(xwl_present_window->frame_callback,
                                  &xwl_present_frame_listener,
-                                 xwl_window);
+                                 xwl_present_window);
     }
 
     wl_surface_damage(xwl_window->surface, 0, 0,
@@ -498,8 +502,8 @@ xwl_present_flip(WindowPtr present_window,
 
     wl_surface_commit(xwl_window->surface);
 
-    xwl_window->present_sync_callback = wl_display_sync(xwl_window->xwl_screen->display);
-    wl_callback_add_listener(xwl_window->present_sync_callback,
+    xwl_present_window->sync_callback = wl_display_sync(xwl_window->xwl_screen->display);
+    wl_callback_add_listener(xwl_present_window->sync_callback,
                              &xwl_present_sync_listener,
                              event);
 
@@ -511,6 +515,7 @@ static void
 xwl_present_flips_stop(WindowPtr window)
 {
     struct xwl_window *xwl_window = xwl_window_from_window(window);
+    struct xwl_present_window   *xwl_present_window = xwl_present_window_priv(window);
 
     if (!xwl_window)
         return;
@@ -520,7 +525,7 @@ xwl_present_flips_stop(WindowPtr window)
     xwl_window->present_window = NULL;
 
     /* Change back to the fast refresh rate */
-    xwl_present_reset_timer(xwl_window);
+    xwl_present_reset_timer(xwl_present_window);
 }
 
 static present_wnmd_info_rec xwl_present_info = {

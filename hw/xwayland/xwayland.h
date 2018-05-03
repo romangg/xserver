@@ -436,7 +436,7 @@ Bool xwl_glamor_allow_commits(struct xwl_window *xwl_window);
 
 #ifdef GLAMOR_HAS_GBM
 Bool xwl_present_init(ScreenPtr screen);
-void xwl_present_cleanup(struct xwl_window *xwl_window, WindowPtr window);
+void xwl_present_cleanup(WindowPtr window);
 #endif
 
 void xwl_screen_release_tablet_manager(struct xwl_screen *xwl_screen);
