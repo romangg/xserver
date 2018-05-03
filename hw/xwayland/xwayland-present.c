@@ -551,5 +551,8 @@ xwl_present_init(ScreenPtr screen)
     if (xwl_screen->egl_backend.post_damage != NULL)
         return FALSE;
 
+    if (!dixRegisterPrivateKey(&xwl_present_window_private_key, PRIVATE_WINDOW, 0))
+        return FALSE;
+
     return present_wnmd_screen_init(screen, &xwl_present_info);
 }
