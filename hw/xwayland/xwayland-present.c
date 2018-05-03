@@ -36,6 +36,39 @@
 #define TIMER_LEN_COPY      17  // ~60fps
 #define TIMER_LEN_FLIP    1000  // 1fps
 
+static DevPrivateKeyRec xwl_present_window_private_key;
+
+static struct xwl_present_window *
+xwl_present_window_get(WindowPtr window)
+{
+    struct xwl_present_window *xwl_present_window =
+            dixGetPrivate(&window->devPrivates,
+                             &xwl_present_window_private_key);
+
+    if (xwl_present_window == NULL) {
+        ScreenPtr screen = window->drawable.pScreen;
+
+        xwl_present_window = calloc (1, sizeof (xwl_present_window));
+        if (!xwl_present_window)
+            return NULL;
+
+        xwl_present_window->crtc_fake = RRCrtcCreate(screen,
+                                                     xwl_present_window);
+        xwl_present_window->window = window;
+        xwl_present_window->msc = 1;
+        xwl_present_window->ust = GetTimeInMicros();
+
+        xorg_list_init(&xwl_present_window->event_list);
+        xorg_list_init(&xwl_present_window->release_queue);
+
+        dixSetPrivate(&window->devPrivates,
+                      &present_window_private_key,
+                      xwl_present_window);
+    }
+
+    return xwl_present_window;
+}
+
 static void
 xwl_present_free_timer(struct xwl_window *xwl_window)
 {
@@ -187,25 +220,25 @@ xwl_present_frame_callback(void *data,
                struct wl_callback *callback,
                uint32_t time)
 {
-    struct xwl_window *xwl_window = data;
+    struct xwl_present_window *xwl_present_window = data;
 
-    wl_callback_destroy(xwl_window->present_frame_callback);
-    xwl_window->present_frame_callback = NULL;
+    wl_callback_destroy(xwl_present_window->frame_callback);
+    xwl_present_window->frame_callback = NULL;
 
-    if (xwl_window->present_timer_firing) {
+    if (xwl_present_window->frame_timer_firing) {
         /* If the timer is firing, this frame callback is too late */
         return;
     }
 
-    xwl_window->present_msc++;
-    xwl_window->present_ust = GetTimeInMicros();
+    xwl_present_window->msc++;
+    xwl_present_window->ust = GetTimeInMicros();
 
-    xwl_present_events_notify(xwl_window);
+    xwl_present_events_notify(xwl_present_window);
 
     /* we do not need the timer anymore for this frame,
      * reset it for potentially the next one
      */
-    xwl_present_reset_timer(xwl_window);
+    xwl_present_reset_timer(xwl_present_window);
 }
 
 static const struct wl_callback_listener xwl_present_frame_listener = {
@@ -218,7 +251,7 @@ xwl_present_sync_callback(void *data,
                uint32_t time)
 {
     struct xwl_present_event *event = data;
-    struct xwl_window *xwl_window = event->xwl_window;
+    struct xwl_present_window *xwl_present_window = event->xwl_present_window;
 
     event->pending = FALSE;
 
@@ -230,17 +263,17 @@ xwl_present_sync_callback(void *data,
         return;
     }
 
-    present_wnmd_event_notify(event->present_window,
+    present_wnmd_event_notify(xwl_present_window->window,
                               event->event_id,
-                              xwl_window->present_ust,
-                              xwl_window->present_msc);
+                              xwl_present_window->ust,
+                              xwl_present_window->msc);
 
     if (event->buffer_released)
         /* If the buffer was already released, send the event now again */
-        present_wnmd_event_notify(event->present_window,
+        present_wnmd_event_notify(xwl_present_window->window,
                                   event->event_id,
-                                  xwl_window->present_ust,
-                                  xwl_window->present_msc);
+                                  xwl_present_window->ust,
+                                  xwl_present_window->msc);
 }
 
 static const struct wl_callback_listener xwl_present_sync_listener = {
@@ -250,41 +283,31 @@ static const struct wl_callback_listener xwl_present_sync_listener = {
 static RRCrtcPtr
 xwl_present_get_crtc(WindowPtr present_window)
 {
-    struct xwl_window *xwl_window = xwl_window_from_window(present_window);
-    if (xwl_window == NULL)
+    struct xwl_present_window *xwl_present_window = xwl_present_window_get(present_window);
+    if (xwl_present_window == NULL)
         return NULL;
 
-    return xwl_window->present_crtc_fake;
+    return xwl_present_window->crtc_fake;
 }
 
 static int
 xwl_present_get_ust_msc(WindowPtr present_window, RRCrtcPtr crtc, uint64_t *ust, uint64_t *msc)
 {
-    struct xwl_window *xwl_window = xwl_window_from_window(present_window);
-    if (!xwl_window)
+    struct xwl_present_window *xwl_present_window = xwl_present_window_get(present_window);
+    if (!xwl_present_window)
         return BadAlloc;
 
-    if (xwl_window->present_crtc_fake != crtc) {
+    if (xwl_present_window->crtc_fake != crtc) {
         /* the crtc changed between the last call and this one,
          * falls back to using the saved window msc in Present
          */
         return BadMatch;
     }
 
-    *ust = xwl_window->present_ust;
-    *msc = xwl_window->present_msc;
+    *ust = xwl_present_window->ust;
+    *msc = xwl_present_window->msc;
 
     return Success;
-}
-
-static void
-xwl_present_set_present_window(struct xwl_window *xwl_window,
-                               WindowPtr present_window)
-{
-    if (xwl_window->present_window)
-        return;
-
-    xwl_window->present_window = present_window;
 }
 
 /*
@@ -298,12 +321,13 @@ xwl_present_queue_vblank(WindowPtr present_window,
                          uint64_t msc)
 {
     struct xwl_window *xwl_window = xwl_window_from_window(present_window);
+    struct xwl_present_window *xwl_present_window = xwl_present_window_get(present_window);
     struct xwl_present_event *event;
 
     if (!xwl_window)
         return BadMatch;
 
-    if (xwl_window->present_crtc_fake != crtc)
+    if (xwl_present_window->crtc_fake != crtc)
         return BadRequest;
 
     if (xwl_window->present_window &&
@@ -315,14 +339,13 @@ xwl_present_queue_vblank(WindowPtr present_window,
         return BadAlloc;
 
     event->event_id = event_id;
-    event->present_window = present_window;
-    event->xwl_window = xwl_window;
+    event->xwl_present_window = xwl_present_window;
     event->target_msc = msc;
 
-    xorg_list_append(&event->list, &xwl_window->present_event_list);
+    xorg_list_append(&event->list, &xwl_present_window->event_list);
 
-    if (!xwl_window->present_timer)
-        xwl_present_reset_timer(xwl_window);
+    if (!xwl_present_window->frame_timer)
+        xwl_present_reset_timer(xwl_present_window);
 
     return Success;
 }
@@ -337,13 +360,13 @@ xwl_present_abort_vblank(WindowPtr present_window,
                          uint64_t event_id,
                          uint64_t msc)
 {
-    struct xwl_window *xwl_window = xwl_window_from_window(present_window);
+    struct xwl_present_window *xwl_present_window = xwl_present_window_get(present_window);
     struct xwl_present_event *event, *tmp;
 
-    if (!xwl_window)
+    if (!xwl_present_window)
         return;
 
-    xorg_list_for_each_entry_safe(event, tmp, &xwl_window->present_event_list, list) {
+    xorg_list_for_each_entry_safe(event, tmp, &xwl_present_window->event_list, list) {
         if (event->event_id == event_id) {
             xorg_list_del(&event->list);
             free(event);
@@ -351,7 +374,7 @@ xwl_present_abort_vblank(WindowPtr present_window,
         }
     }
 
-    xorg_list_for_each_entry(event, &xwl_window->present_release_queue, list) {
+    xorg_list_for_each_entry(event, &xwl_present_window->release_queue, list) {
         if (event->event_id == event_id) {
             event->abort = TRUE;
             return;
@@ -386,14 +409,7 @@ xwl_present_check_flip2(RRCrtcPtr crtc,
             xwl_window->present_window != present_window)
         return FALSE;
 
-    if (!xwl_window->present_crtc_fake)
-        return FALSE;
-    /*
-     * Make sure the client doesn't try to flip to another crtc
-     * than the one created for 'xwl_window'.
-     */
-    if (xwl_window->present_crtc_fake != crtc)
-        return FALSE;
+    xwl_window->present_window = present_window;
 
     /*
      * We currently only allow flips of windows, that have the same
@@ -416,15 +432,24 @@ xwl_present_flip(WindowPtr present_window,
                  RegionPtr damage)
 {
     struct xwl_window           *xwl_window = xwl_window_from_window(present_window);
+    struct xwl_present_window   *xwl_present_window = xwl_present_window_get(xwl_window);
     BoxPtr                      present_box, damage_box;
     Bool                        buffer_created;
     struct wl_buffer            *buffer;
     struct xwl_present_event    *event;
 
+    if (!xwl_window)
+        return FALSE;
+
+    /*
+     * Make sure the client doesn't try to flip to another crtc
+     * than the one created for 'xwl_window'.
+     */
+    if (xwl_present_window->crtc_fake != crtc)
+        return FALSE;
+
     present_box = RegionExtents(&present_window->winSize);
     damage_box = RegionExtents(damage);
-
-    xwl_present_set_present_window(xwl_window, present_window);
 
     event = malloc(sizeof *event);
     if (!event)
