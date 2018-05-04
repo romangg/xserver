@@ -93,16 +93,24 @@ xwl_present_has_events(struct xwl_present_window *xwl_present_window)
            !xorg_list_is_empty(&xwl_present_window->release_queue);
 }
 
+static inline Bool
+xwl_present_is_flipping(WindowPtr window, struct xwl_window *xwl_window)
+{
+    return xwl_window && xwl_window->present_window == window;
+}
+
 static void
 xwl_present_reset_timer(struct xwl_present_window *xwl_present_window)
 {
     if (xwl_present_has_events(xwl_present_window)) {
-        uint32_t timer_len = xwl_present_window->window ? TIMER_LEN_FLIP :
-                                                          TIMER_LEN_COPY;
+        WindowPtr present_window = xwl_present_window->window;
+        Bool is_flipping = xwl_present_is_flipping(present_window,
+                                                   xwl_window_from_window(present_window));
 
         xwl_present_window->frame_timer = TimerSet(xwl_present_window->frame_timer,
                                                    0,
-                                                   timer_len,
+                                                   is_flipping ? TIMER_LEN_FLIP :
+                                                                 TIMER_LEN_COPY,
                                                    &xwl_present_timer_callback,
                                                    xwl_present_window);
     } else {
@@ -220,8 +228,8 @@ xwl_present_timer_callback(OsTimerPtr timer,
 
     if (xwl_present_has_events(xwl_present_window)) {
         /* Still events, restart timer */
-        Bool is_presenting = xwl_window && xwl_window->present_window == present_window;
-        return is_presenting ? TIMER_LEN_FLIP : TIMER_LEN_COPY;
+        return xwl_present_is_flipping(present_window, xwl_window) ? TIMER_LEN_FLIP :
+                                                                     TIMER_LEN_COPY;
     } else {
         /* No more events, do not restart timer and delete it instead */
         xwl_present_free_timer(xwl_present_window);
@@ -424,8 +432,6 @@ xwl_present_check_flip2(RRCrtcPtr crtc,
     if (!RegionEqual(&xwl_window->window->winSize, &present_window->winSize))
         return FALSE;
 
-    xwl_window->present_window = present_window;
-
     return TRUE;
 }
 
@@ -461,6 +467,8 @@ xwl_present_flip(WindowPtr present_window,
     event = malloc(sizeof *event);
     if (!event)
         return FALSE;
+
+    xwl_window->present_window = present_window;
 
     buffer = xwl_glamor_pixmap_get_wl_buffer(pixmap,
                                              present_box->x2 - present_box->x1,
