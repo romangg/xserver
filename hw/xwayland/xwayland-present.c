@@ -144,6 +144,8 @@ xwl_present_cleanup(WindowPtr window)
 
     /* Clear timer */
     xwl_present_free_timer(xwl_present_window);
+
+    free(xwl_present_window);
 }
 
 static void
@@ -218,8 +220,8 @@ xwl_present_timer_callback(OsTimerPtr timer,
 
     if (xwl_present_has_events(xwl_present_window)) {
         /* Still events, restart timer */
-        return xwl_window->present_window == present_window ? TIMER_LEN_FLIP :
-                                                              TIMER_LEN_COPY;
+        Bool is_presenting = xwl_window && xwl_window->present_window == present_window;
+        return is_presenting ? TIMER_LEN_FLIP : TIMER_LEN_COPY;
     } else {
         /* No more events, do not restart timer and delete it instead */
         xwl_present_free_timer(xwl_present_window);
